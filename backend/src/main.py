@@ -1,21 +1,23 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import os
 import uvicorn
+import sys
 
-from src.api import api_router
-from src.services.db_service import db_service
-from src.repositories.user_repository import user_repository
-from src.models.user import UserCreate
-
+# 使用服务工厂和路由管理器
+from src.services.service_factory import service_factory, UserCreate, get_password_hash
+from src.routes.router_manager import router_manager
+from src.middleware.rate_limiter import RateLimitMiddleware
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -26,12 +28,12 @@ async def lifespan(app: FastAPI):
     # 启动时执行
     logger.info("正在初始化应用...")
     
-    # 初始化数据库连接
+    # 使用服务工厂初始化所有服务
     try:
-        await db_service.initialize()
-        logger.info("数据库连接初始化成功")
+        await service_factory.initialize_all()
+        logger.info("所有服务初始化成功")
     except Exception as e:
-        logger.error(f"数据库初始化失败: {str(e)}")
+        logger.error(f"服务初始化失败: {str(e)}")
         raise
     
     # 创建默认管理员用户（如果不存在）
@@ -41,14 +43,14 @@ async def lifespan(app: FastAPI):
         admin_password = os.getenv("ADMIN_PASSWORD", "admin123456")
         
         # 检查管理员用户是否存在
-        existing_admin = await user_repository.find_by_username(admin_username)
+        existing_admin = await service_factory.user_repository.find_by_username(admin_username)
         if not existing_admin:
             admin_data = UserCreate(
                 username=admin_username,
                 email=admin_email,
-                password=admin_password
+                password=get_password_hash(admin_password)
             )
-            await user_repository.create_user(
+            await service_factory.user_repository.create_user(
                 admin_data.dict(),
                 is_admin=True
             )
@@ -62,8 +64,13 @@ async def lifespan(app: FastAPI):
     
     # 关闭时执行
     logger.info("正在关闭应用...")
-    await db_service.close()
-    logger.info("数据库连接已关闭")
+    
+    # 使用服务工厂关闭所有服务
+    try:
+        await service_factory.shutdown_all()
+        logger.info("所有服务已关闭")
+    except Exception as e:
+        logger.error(f"关闭服务失败: {str(e)}")
 
 
 # 创建FastAPI应用实例
@@ -75,33 +82,35 @@ app = FastAPI(
 )
 
 # 配置CORS
+cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该设置具体的前端域名
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 注册路由
-app.include_router(api_router, prefix="/api")
+# 添加速率限制中间件
+app.add_middleware(RateLimitMiddleware)
+
+# 使用路由管理器注册所有路由
+router_manager.register_all_routes()
+app.include_router(router_manager.main_router)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """全局异常处理器"""
     logger.error(f"全局异常: {str(exc)}", exc_info=True)
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "服务器内部错误"}
-    )
+    return {"detail": "服务器内部错误"}
 
 
 @app.get("/")
 async def root():
     """根路径"""
     return {
-        "message": "欢迎使用智能知识图谱系统 API",
+        "message": "欢迎使用知识图谱构建与查询系统",
         "version": "1.0.0",
         "docs": "/docs",
         "redoc": "/redoc"
@@ -111,8 +120,8 @@ async def root():
 @app.get("/health")
 async def health_check():
     """健康检查端点"""
-    # 检查数据库连接状态
-    db_status = await db_service.health_check()
+    # 使用服务工厂获取数据库服务进行健康检查
+    db_status = await service_factory.db_service.health_check()
     
     return {
         "status": "healthy" if db_status["status"] == "healthy" else "unhealthy",
@@ -132,5 +141,6 @@ if __name__ == "__main__":
         "src.main:app",
         host=host,
         port=port,
-        reload=reload
+        reload=reload,
+        log_level="info"
     )

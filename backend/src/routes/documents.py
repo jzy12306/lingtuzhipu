@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, BackgroundTasks
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 from src.models.document import (
@@ -12,10 +12,13 @@ from src.utils.dependencies import get_current_user, validate_document_permissio
 from src.utils.file_processing import process_uploaded_file
 from src.services.document_service import DocumentService
 from src.models.user import User
+from src.agents.builder import BuilderAgentService
+from src.utils.config import settings
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
+# 创建仓库实例
 def get_document_repository() -> DocumentRepository:
     return DocumentRepository()
 
@@ -29,6 +32,15 @@ def get_document_service(
     knowledge_repo: KnowledgeRepository = Depends(get_knowledge_repository)
 ) -> DocumentService:
     return DocumentService(doc_repo, knowledge_repo)
+
+
+def get_builder_service(knowledge_repo: KnowledgeRepository = Depends(get_knowledge_repository)) -> BuilderAgentService:
+    return BuilderAgentService.get_instance(knowledge_repo)
+
+
+# 添加导入
+import logging
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=DocumentResponse)
@@ -159,9 +171,10 @@ async def process_document(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     document: Document = Depends(validate_document_permission),
-    doc_service: DocumentService = Depends(get_document_service)
+    doc_service: DocumentService = Depends(get_document_service),
+    builder_service: BuilderAgentService = Depends(get_builder_service)
 ):
-    """处理文档并提取知识（异步）"""
+    """使用构建者智能体处理文档并提取知识（异步）"""
     # 检查是否是文档所有者或管理员
     if document.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="无权处理此文档")
@@ -175,6 +188,7 @@ async def process_document(
         document_id=document_id,
         user_id=current_user.id
     )
+    logger.info(f"已安排文档处理任务: {document_id} 用户: {current_user.id}")
     
     # 返回更新后的文档状态
     updated_doc = await doc_service.get_document(document_id)
@@ -239,7 +253,48 @@ async def batch_delete_documents(
             # 删除文档
             if await doc_repo.delete_document(doc_id):
                 deleted_count += 1
-        except Exception:
+                logger.info(f"批量删除文档成功: {doc_id} 用户: {current_user.id}")
+        except Exception as e:
+            logger.error(f"批量删除文档失败: {doc_id} 错误: {str(e)}")
             continue
     
     return {"deleted_count": deleted_count}
+
+
+@router.post("/batch/process")
+async def batch_process_documents(
+    document_ids: List[str],
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    doc_repo: DocumentRepository = Depends(get_document_repository),
+    doc_service: DocumentService = Depends(get_document_service)
+):
+    """批量处理文档并提取知识"""
+    if len(document_ids) > 10:
+        raise HTTPException(status_code=400, detail="一次最多只能处理10个文档")
+    
+    # 验证所有文档的权限
+    authorized_docs = []
+    for doc_id in document_ids:
+        doc = await doc_repo.get_document(doc_id)
+        if doc and (doc.user_id == current_user.id or current_user.is_admin):
+            authorized_docs.append(doc_id)
+    
+    if not authorized_docs:
+        raise HTTPException(status_code=403, detail="没有权限处理这些文档")
+    
+    # 异步处理每个文档
+    for doc_id in authorized_docs:
+        await doc_service.update_document_status(doc_id, "processing")
+        background_tasks.add_task(
+            doc_service.process_document_async,
+            document_id=doc_id,
+            user_id=current_user.id
+        )
+        logger.info(f"已安排批量文档处理任务: {doc_id} 用户: {current_user.id}")
+    
+    return {
+        "message": "批量处理任务已安排",
+        "processing_count": len(authorized_docs),
+        "document_ids": authorized_docs
+    }

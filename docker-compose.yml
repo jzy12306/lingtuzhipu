@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DB_URL=sqlite:///./app.db
+      - SECRET_KEY=your-secret-key-change-in-production
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080,http://frontend:80
+      - RATE_LIMIT_ENABLED=True
+      - RATE_LIMIT_PER_MINUTE=60
+      - RATE_LIMIT_PER_HOUR=1000
+    volumes:
+      - backend-data:/app/data
+      - backend-logs:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - app-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+
+  # Redis服务（用于缓存和消息队列）
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+volumes:
+  backend-data:
+    driver: local
+  backend-logs:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
