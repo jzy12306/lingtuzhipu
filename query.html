@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能问答 - 知识图谱查询系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+        }
+        .query-input {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        .query-input:focus {
+            border-color: rgba(6, 182, 212, 0.8);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+        .result-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .thinking-animation {
+            animation: thinking 2s infinite;
+        }
+        @keyframes thinking {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        .processing-step {
+            opacity: 0.5;
+            transition: all 0.5s ease;
+        }
+        .processing-step.active {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+        .processing-step.completed {
+            opacity: 0.8;
+        }
+        #background-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="text-white overflow-x-hidden">
+    <!-- 动态背景画布 -->
+    <canvas id="background-canvas"></canvas>
+    
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold">智能知识图谱</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="index.html" class="text-slate-300 hover:text-white transition-colors">首页</a>
+                    <a href="query.html" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">知识查询</a>
+                    <a href="graph.html" class="text-slate-300 hover:text-white transition-colors">图谱可视</a>
+                    <a href="admin.html" class="text-slate-300 hover:text-white transition-colors">系统管理</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="pt-24 pb-16">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- 页面标题 -->
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
+                    智能知识问答
+                </h1>
+                <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+                    基于GraphRAG的复杂推理系统，支持多跳推理和深度语义理解
+                </p>
+            </div>
+
+            <!-- 查询输入区域 -->
+            <div class="mb-8">
+                <div class="relative max-w-4xl mx-auto">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-1 relative">
+                            <input 
+                                type="text" 
+                                id="query-input" 
+                                placeholder="请输入您的问题，例如：'分析苹果公司近五年的产品创新策略'"
+                                class="query-input w-full px-6 py-4 rounded-xl text-white placeholder-slate-400 focus:outline-none text-lg"
+                            >
+                            <div class="absolute right-4 top-1/2 transform -translate-y-1/2">
+                                <button 
+                                    id="query-submit" 
+                                    onclick="submitQuery()"
+                                    class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 px-6 py-2 rounded-lg font-medium transition-all duration-300 transform hover:scale-105"
+                                >
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/>
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.51-1.31c-.562-.649-1.413-1.076-2.353-1.253V5z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 热门查询标签 -->
+                <div class="mt-6 text-center">
+                    <div class="text-sm text-slate-400 mb-3">热门查询：</div>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        <button onclick="useQuickQuery('分析特斯拉的竞争优势')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-full text-sm transition-colors">
+                            分析特斯拉的竞争优势
+                        </button>
+                        <button onclick="useQuickQuery('量子计算的最新进展')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-full text-sm transition-colors">
+                            量子计算的最新进展
+                        </button>
+                        <button onclick="useQuickQuery('新能源汽车市场趋势')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-full text-sm transition-colors">
+                            新能源汽车市场趋势
+                        </button>
+                        <button onclick="useQuickQuery('人工智能伦理问题')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-full text-sm transition-colors">
+                            人工智能伦理问题
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 处理过程展示 -->
+            <div id="processing-steps" class="mb-8 hidden">
+                <h3 class="text-lg font-semibold mb-4 text-center">GraphRAG 检索过程</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="processing-step result-card rounded-lg p-4 text-center" id="step-query">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <h4 class="font-medium mb-2">查询理解</h4>
+                        <p class="text-sm text-slate-400">解析用户意图</p>
+                    </div>
+
+                    <div class="processing-step result-card rounded-lg p-4 text-center" id="step-retrieval">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+                            </svg>
+                        </div>
+                        <h4 class="font-medium mb-2">图谱检索</h4>
+                        <p class="text-sm text-slate-400">多路召回策略</p>
+                    </div>
+
+                    <div class="processing-step result-card rounded-lg p-4 text-center" id="step-reasoning">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 3a1 1 0 012 0v5.5a.5.5 0 001 0V4a1 1 0 112 0v4.5a.5.5 0 001 0V6a1 1 0 112 0v6.5a.5.5 0 001 0V9a1 1 0 012 0v7a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/>
+                            </svg>
+                        </div>
+                        <h4 class="font-medium mb-2">多跳推理</h4>
+                        <p class="text-sm text-slate-400">深度逻辑推理</p>
+                    </div>
+
+                    <div class="processing-step result-card rounded-lg p-4 text-center" id="step-generation">
+                        <div class="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                        </div>
+                        <h4 class="font-medium mb-2">答案生成</h4>
+                        <p class="text-sm text-slate-400">智能答案整合</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 查询结果展示 -->
+            <div id="query-results" class="hidden">
+                <!-- 结果将在这里动态生成 -->
+            </div>
+
+            <!-- 查询历史 -->
+            <div class="mt-16">
+                <h3 class="text-2xl font-bold mb-6">查询历史</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="query-history">
+                    <!-- 历史查询项目 -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="py-12 border-t border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p class="text-slate-400">© 2024 智能知识图谱系统. 基于多智能体协作的先进知识工程平台.</p>
+        </div>
+    </footer>
+
+    <script>
+        // 查询历史数据
+        const queryHistoryData = [
+            {
+                id: 1,
+                query: "分析苹果公司的产品创新策略",
+                type: "商业分析",
+                time: "2024-01-15 14:30",
+                resultPreview: "苹果公司通过垂直整合、设计驱动和生态系统构建，实现了持续的产品创新..."
+            },
+            {
+                id: 2,
+                query: "量子计算的最新技术突破",
+                type: "科技前沿",
+                time: "2024-01-15 13:45",
+                resultPreview: "2024年量子计算领域实现了量子纠错、量子网络和量子算法三大突破..."
+            },
+            {
+                id: 3,
+                query: "新能源汽车市场发展趋势",
+                type: "市场分析",
+                time: "2024-01-15 12:20",
+                resultPreview: "全球新能源汽车市场呈现快速增长态势，预计2025年渗透率将达到25%..."
+            },
+            {
+                id: 4,
+                query: "人工智能伦理与监管框架",
+                type: "政策法规",
+                time: "2024-01-15 11:15",
+                resultPreview: "各国正在建立AI伦理准则和监管框架，重点关注透明度、公平性和安全性..."
+            },
+            {
+                id: 5,
+                query: "区块链技术在金融领域的应用",
+                type: "技术应用",
+                time: "2024-01-15 10:30",
+                resultPreview: "区块链技术在支付清算、数字身份和智能合约等方面展现出巨大潜力..."
+            },
+            {
+                id: 6,
+                query: "全球气候变化应对策略",
+                type: "环境政策",
+                time: "2024-01-15 09:45",
+                resultPreview: "国际社会通过碳中和承诺、绿色技术创新和气候合作应对气候变化挑战..."
+            }
+        ];
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initBackgroundAnimation();
+            initQueryHistory();
+            initAnimations();
+        });
+
+        // 初始化背景动画
+        function initBackgroundAnimation() {
+            const canvas = document.getElementById('background-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const particleCount = 100;
+
+            // 创建粒子
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5,
+                    size: Math.random() * 2 + 1,
+                    opacity: Math.random() * 0.5 + 0.2
+                });
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // 更新和绘制粒子
+                particles.forEach(particle => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+
+                    if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
+                    if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(6, 182, 212, ${particle.opacity})`;
+                    ctx.fill();
+                });
+
+                // 绘制连接线
+                for (let i = 0; i < particles.length; i++) {
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const dx = particles[i].x - particles[j].x;
+                        const dy = particles[i].y - particles[j].y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < 100) {
+                            ctx.beginPath();
+                            ctx.moveTo(particles[i].x, particles[i].y);
+                            ctx.lineTo(particles[j].x, particles[j].y);
+                            ctx.strokeStyle = `rgba(6, 182, 212, ${0.1 * (1 - distance / 100)})`;
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            animate();
+
+            // 窗口大小改变时调整画布
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+        }
+
+        // 初始化查询历史
+        function initQueryHistory() {
+            const historyContainer = document.getElementById('query-history');
+            if (!historyContainer) return;
+
+            queryHistoryData.forEach(item => {
+                const historyItem = createHistoryItem(item);
+                historyContainer.appendChild(historyItem);
+            });
+        }
+
+        // 创建历史查询项目
+        function createHistoryItem(item) {
+            const div = document.createElement('div');
+            div.className = 'result-card rounded-lg p-6 cursor-pointer hover:bg-slate-700/50 transition-colors';
+            div.onclick = () => useQuickQuery(item.query);
+
+            div.innerHTML = `
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex-1">
+                        <h4 class="font-medium text-lg mb-2 line-clamp-2">${item.query}</h4>
+                        <div class="flex items-center space-x-3 text-sm text-slate-400">
+                            <span class="px-2 py-1 bg-slate-600 rounded text-xs">${item.type}</span>
+                            <span>${item.time}</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-slate-300 text-sm line-clamp-3">${item.resultPreview}</p>
+                <div class="mt-4 flex items-center text-cyan-400 text-sm">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    查看详情
+                </div>
+            `;
+
+            return div;
+        }
+
+        // 使用快速查询
+        function useQuickQuery(query) {
+            const queryInput = document.getElementById('query-input');
+            if (queryInput) {
+                queryInput.value = query;
+                queryInput.focus();
+                
+                // 添加动画效果
+                anime({
+                    targets: queryInput,
+                    scale: [1, 1.02, 1],
+                    duration: 300,
+                    easing: 'easeInOutQuad'
+                });
+            }
+        }
+
+        // 提交查询
+        function submitQuery() {
+            const queryInput = document.getElementById('query-input');
+            const query = queryInput.value.trim();
+            
+            if (!query) {
+                alert('请输入查询内容');
+                return;
+            }
+
+            // 显示处理步骤
+            showProcessingSteps();
+            
+            // 模拟处理过程
+            simulateQueryProcessing(query);
+        }
+
+        // 显示处理步骤
+        function showProcessingSteps() {
+            const processingSteps = document.getElementById('processing-steps');
+            processingSteps.classList.remove('hidden');
+
+            // 动画显示处理步骤
+            anime({
+                targets: '.processing-step',
+                translateY: [30, 0],
+                opacity: [0, 1],
+                delay: anime.stagger(200),
+                duration: 600,
+                easing: 'easeOutQuart'
+            });
+        }
+
+        // 模拟查询处理过程
+        function simulateQueryProcessing(query) {
+            const steps = ['query', 'retrieval', 'reasoning', 'generation'];
+            let currentStep = 0;
+
+            function processNextStep() {
+                if (currentStep < steps.length) {
+                    const stepElement = document.getElementById(`step-${steps[currentStep]}`);
+                    stepElement.classList.add('active');
+
+                    // 添加思考动画
+                    const icon = stepElement.querySelector('.w-12');
+                    icon.classList.add('thinking-animation');
+
+                    setTimeout(() => {
+                        icon.classList.remove('thinking-animation');
+                        stepElement.classList.remove('active');
+                        stepElement.classList.add('completed');
+                        
+                        currentStep++;
+                        
+                        if (currentStep < steps.length) {
+                            setTimeout(processNextStep, 500);
+                        } else {
+                            // 处理完成，显示结果
+                            setTimeout(() => showQueryResults(query), 1000);
+                        }
+                    }, 2000);
+                }
+            }
+
+            processNextStep();
+        }
+
+        // 显示查询结果
+        function showQueryResults(query) {
+            const resultsContainer = document.getElementById('query-results');
+            resultsContainer.classList.remove('hidden');
+
+            // 生成模拟结果
+            const mockResult = generateMockResult(query);
+            
+            resultsContainer.innerHTML = `
+                <div class="result-card rounded-xl p-8 mb-6">
+                    <div class="flex items-start justify-between mb-6">
+                        <h3 class="text-2xl font-bold">查询结果</h3>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-3 py-1 bg-green-600 text-green-100 rounded-full text-sm">已完成</span>
+                            <span class="text-slate-400 text-sm">处理时间: 3.2秒</span>
+                        </div>
+                    </div>
+                    
+                    <div class="prose prose-invert max-w-none">
+                        ${mockResult.answer}
+                    </div>
+                    
+                    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-3 text-cyan-400">关键实体</h4>
+                            <div class="space-y-2">
+                                ${mockResult.entities.map(entity => `
+                                    <div class="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2">
+                                        <span>${entity.name}</span>
+                                        <span class="text-xs px-2 py-1 bg-cyan-600 rounded">${entity.type}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-semibold mb-3 text-cyan-400">相关关系</h4>
+                            <div class="space-y-2">
+                                ${mockResult.relationships.map(rel => `
+                                    <div class="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2">
+                                        <span class="text-sm">${rel.from} → ${rel.to}</span>
+                                        <span class="text-xs px-2 py-1 bg-purple-600 rounded">${rel.type}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-8 flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <button class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors">
+                                导出结果
+                            </button>
+                            <button class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                                分享查询
+                            </button>
+                        </div>
+                        <div class="text-sm text-slate-400">
+                            置信度: ${mockResult.confidence}%
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 添加结果动画
+            anime({
+                targets: resultsContainer,
+                translateY: [50, 0],
+                opacity: [0, 1],
+                duration: 800,
+                easing: 'easeOutQuart'
+            });
+        }
+
+        // 生成模拟结果
+        function generateMockResult(query) {
+            const entities = [
+                { name: "苹果公司", type: "公司" },
+                { name: "史蒂夫·乔布斯", type: "人物" },
+                { name: "iPhone", type: "产品" },
+                { name: "创新策略", type: "概念" }
+            ];
+
+            const relationships = [
+                { from: "苹果公司", to: "iPhone", type: "开发" },
+                { from: "史蒂夫·乔布斯", to: "苹果公司", type: "创立" },
+                { from: "iPhone", to: "创新策略", type: "体现" }
+            ];
+
+            return {
+                answer: `
+                    <h4>核心分析</h4>
+                    <p>苹果公司的产品创新策略体现了设计驱动、用户中心和生态系统整合的核心理念。通过垂直整合硬件、软件和服务，苹果创造了独特的产品体验和竞争优势。</p>
+                    
+                    <h4>创新要素</h4>
+                    <ul>
+                        <li><strong>设计思维：</strong>以用户体验为中心的设计理念</li>
+                        <li><strong>技术整合：</strong>软硬件深度集成优化</li>
+                        <li><strong>生态协同：</strong>产品间的无缝连接体验</li>
+                        <li><strong>持续迭代：</strong>基于用户反馈的快速改进</li>
+                    </ul>
+                    
+                    <h4>市场表现</h4>
+                    <p>该策略帮助苹果在高端市场建立了强大的品牌忠诚度，并实现了持续的营收增长。iPhone系列产品成为全球智能手机市场的标杆。</p>
+                `,
+                entities,
+                relationships,
+                confidence: Math.floor(Math.random() * 10) + 90 // 90-99%
+            };
+        }
+
+        // 初始化动画
+        function initAnimations() {
+            // 页面加载动画
+            anime({
+                targets: 'main > div > *',
+                translateY: [30, 0],
+                opacity: [0, 1],
+                delay: anime.stagger(100),
+                duration: 600,
+                easing: 'easeOutQuart'
+            });
+        }
+
+        // 监听回车键提交查询
+        document.getElementById('query-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitQuery();
+            }
+        });
+    </script>
+</body>
+</html>
