@@ -1,9 +1,9 @@
 """智能体系统包"""
 
-from src.agents.agent_base import BaseAgent, AgentResult
-from src.agents.agent_manager import agent_manager
-from src.agents.workflow import AgentWorkflow, WorkflowNode, workflow_manager
-from src.agents.langgraph_integration import langgraph_integration
+from agents.agent_base import BaseAgent, AgentResult
+from agents.agent_manager import agent_manager
+from agents.workflow import AgentWorkflow, WorkflowNode, workflow_manager
+from agents.langgraph_integration import langgraph_integration
 
 __all__ = [
     "BaseAgent",
@@ -20,7 +20,7 @@ async def initialize_agent_system():
     """初始化智能体系统"""
     try:
         # 初始化LangGraph工作流
-        from src.agents.agent_manager import agent_manager
+        from agents.agent_manager import agent_manager
         
         # 创建知识处理工作流
         langgraph_integration.create_knowledge_processing_graph(agent_manager)

@@ -5,10 +5,10 @@ import asyncio
 import re
 from datetime import datetime
 
-from src.agents.analyst.analyst_agent import AnalystAgent
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
-from src.services.openai_service import OpenAIService
+from agents.analyst.analyst_agent import AnalystAgent
+from repositories.knowledge_repository import KnowledgeRepository
+from utils.config import settings
+from services.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 

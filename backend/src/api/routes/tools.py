@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional, Dict, Any
 
-from src.models.agent import AgentTask, AgentResult, WorkflowTask
-from src.repositories.document_repository import document_repository
-from src.agents import process_query_with_workflow
-from src.utils.dependencies import get_current_user
+from models.agent import AgentTask, AgentResult, WorkflowTask
+from repositories.document_repository import document_repository
+from agents import process_query_with_workflow
+from utils.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -211,7 +211,7 @@ async def execute_workflow(
             # 重新处理文档
             document = await document_repository.find_by_id(workflow_data["document_id"])
             if document and "content" in document:
-                from src.agents import process_document_with_workflow
+                from agents import process_document_with_workflow
                 await process_document_with_workflow(
                     document["id"],
                     document["content"]

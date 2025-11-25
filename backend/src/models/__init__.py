@@ -1,13 +1,13 @@
 """数据模型包"""
 
-from src.models.user import User, UserCreate, UserUpdate, UserResponse
-from src.models.document import Document, DocumentCreate, DocumentUpdate, DocumentResponse
-from src.models.knowledge import (
+from models.user import User, UserCreate, UserUpdate, UserResponse
+from models.document import Document, DocumentCreate, DocumentUpdate, DocumentResponse
+from models.knowledge import (
     Entity, EntityCreate, EntityUpdate, EntityResponse,
     Relation, RelationCreate, RelationUpdate, RelationResponse,
     KnowledgeGraphQuery, KnowledgeGraphResponse
 )
-from src.models.agent import AgentTask, AgentResult
+from models.agent import AgentTask, AgentResult
 
 __all__ = [
     # 用户模型

@@ -1,8 +1,8 @@
 from typing import Dict, List, Any, Optional
 import logging
-from src.agents.analyst.analyst_agent import AnalystAgent
-from src.agents.analyst.llm_analyst_agent import LLMAnalystAgent
-from src.repositories.knowledge_repository import KnowledgeRepository
+from agents.analyst.analyst_agent import AnalystAgent
+from agents.analyst.llm_analyst_agent import LLMAnalystAgent
+from repositories.knowledge_repository import KnowledgeRepository
 
 logger = logging.getLogger(__name__)
 

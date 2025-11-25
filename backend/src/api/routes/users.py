@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 
-from src.models.user import UserResponse, UserUpdate
-from src.repositories.user_repository import user_repository
-from src.utils.dependencies import get_current_user, get_admin_user
+from models.user import UserResponse, UserUpdate
+from repositories.user_repository import user_repository
+from utils.dependencies import get_current_user, get_admin_user
 
 router = APIRouter()
 

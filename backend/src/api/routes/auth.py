@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import timedelta
 
-from src.models.user import UserCreate, UserResponse, Token
-from src.repositories.user_repository import user_repository
-from src.services.auth_service import auth_service
-from src.utils.dependencies import get_current_user
+from models.user import UserCreate, UserResponse, Token
+from repositories.user_repository import user_repository
+from services.auth_service import auth_service
+from utils.dependencies import get_current_user
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")

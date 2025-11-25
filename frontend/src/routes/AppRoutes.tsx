@@ -6,20 +6,16 @@ import type { FC } from 'react';
 // 导入页面组件
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
-import HomePage from '../pages/HomePage';
+import DashboardPage from '../pages/DashboardPage';
 import DocumentManagementPage from '../pages/DocumentManagementPage';
 import GraphVisualizationPage from '../pages/GraphVisualizationPage';
 import QueryPage from '../pages/QueryPage';
-import ProfilePage from '../pages/ProfilePage';
+import UserCenterPage from '../pages/UserCenterPage';
 
 // 导入布局组件
-import Header from '../components/layout/Header';
-import Sidebar from '../components/layout/Sidebar';
-import Footer from '../components/layout/Footer';
-
-// 导入认证组件
-import ProtectedRoute from '../components/auth/ProtectedRoute';
-import { useAuthContext } from '../context/AuthContext';
+import Header from '../components/Header';
+import Sidebar from '../components/Sidebar';
+import { AuthContextProvider } from '../context/AuthContext';
 
 const { Content } = Layout;
 
@@ -33,25 +29,24 @@ const MainLayout: FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header />
+      <Header collapsed={collapsed} onToggle={toggleCollapsed} />
       <Layout hasSider>
-        <Sidebar collapsed={collapsed} onCollapse={toggleCollapsed} />
+        <Sidebar collapsed={collapsed} />
         <Layout>
           <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280 }}>
             {children}
           </Content>
-          <Footer />
         </Layout>
       </Layout>
     </Layout>
   );
 };
 
-// 公共布局 - 无侧边栏和页脚
+// 公共布局 - 无侧边栏
 const PublicLayout: FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header showLogoOnly />
+      <Header collapsed={false} onToggle={() => {}} />
       <Content style={{ margin: '24px 16px', padding: 24, background: '#fff', minHeight: 280 }}>
         {children}
       </Content>
@@ -61,38 +56,26 @@ const PublicLayout: FC<{ children: React.ReactNode }> = ({ children }) => {
 
 // 主路由配置
 const AppRoutes: FC = () => {
-  const { isLoading } = useAuthContext();
-
-  if (isLoading) {
-    // 可以在这里添加一个加载动画
-    return (
-      <Layout style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div>正在加载...</div>
-      </Layout>
-    );
-  }
-
   return (
-    <Router>
-      <Routes>
-        {/* 公共路由 - 无需认证 */}
-        <Route path="/login" element={
-          <PublicLayout>
-            <LoginPage />
-          </PublicLayout>
-        } />
-        <Route path="/register" element={
-          <PublicLayout>
-            <RegisterPage />
-          </PublicLayout>
-        } />
+    <AuthContextProvider>
+      <Router>
+        <Routes>
+          {/* 公共路由 - 无需认证 */}
+          <Route path="/login" element={
+            <PublicLayout>
+              <LoginPage />
+            </PublicLayout>
+          } />
+          <Route path="/register" element={
+            <PublicLayout>
+              <RegisterPage />
+            </PublicLayout>
+          } />
 
-        {/* 受保护的路由 - 需要认证 */}
-        <Route element={<ProtectedRoute />}>
-          {/* 首页 */}
+          {/* 受保护的路由 - 需要认证 */}
           <Route path="/" element={
             <MainLayout>
-              <HomePage />
+              <DashboardPage />
             </MainLayout>
           } />
           
@@ -117,18 +100,18 @@ const AppRoutes: FC = () => {
             </MainLayout>
           } />
           
-          {/* 用户个人资料 */}
-          <Route path="/profile" element={
+          {/* 用户中心 */}
+          <Route path="/user-center" element={
             <MainLayout>
-              <ProfilePage />
+              <UserCenterPage />
             </MainLayout>
           } />
-        </Route>
 
-        {/* 404 页面 */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* 404 页面 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </AuthContextProvider>
   );
 };
 

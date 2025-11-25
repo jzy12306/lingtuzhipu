@@ -12,7 +12,8 @@ import {
   FolderOutlined,
   CodeOutlined,
   CompassOutlined,
-  MessageOutlined
+  MessageOutlined,
+  UserSwitchOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { ROUTES } from '../utils/config';
@@ -43,6 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     else if (pathname === ROUTES.GRAPH) activeKey = 'graph';
     else if (pathname === ROUTES.PROFILE) activeKey = 'profile';
     else if (pathname === ROUTES.SETTINGS) activeKey = 'settings';
+    else if (pathname === '/user-center') activeKey = 'user-center';
     
     setCurrentActiveKey(activeKey);
   }, [location.pathname]);
@@ -124,6 +126,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     <Divider style={{ margin: '8px 0' }} key="divider2" />,
     
     // 个人和设置区域
+    {
+      label: '用户中心',
+      key: 'user-center',
+      icon: <UserSwitchOutlined />,
+      onClick: () => navigate('/user-center'),
+    },
     {
       label: '个人资料',
       key: 'profile',

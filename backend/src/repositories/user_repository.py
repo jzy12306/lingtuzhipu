@@ -3,8 +3,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from passlib.context import CryptContext
 from bson import ObjectId
-from src.services.db_service import db_service
-from src.models.user import User
+from services.db_service import db_service
+from models.user import User
 
 # 密码加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

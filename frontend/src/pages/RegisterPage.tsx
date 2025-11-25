@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Button, Checkbox, Typography, message, Spin, Divider, Row, Col, Countdown } from 'antd';
-import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Typography, message, Spin, Divider } from 'antd';
+import { LockOutlined, UserOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { APP_CONFIG } from '../utils/config';
-import backgroundImage from '../assets/background.jpg'; // 这里需要准备一张背景图片
 
 const { Title, Paragraph } = Typography;
 
-const LoginPage: React.FC = () => {
+const RegisterPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [countdown, setCountdown] = useState(0); // 验证码倒计时
-  const { login } = useAuth();
   const navigate = useNavigate();
   const [form] = Form.useForm();
 
@@ -53,21 +49,26 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // 处理登录提交
-  const handleLogin = async (values: { email: string; password: string }) => {
+  // 处理注册提交
+  const handleRegister = async (values: { username: string; email: string; password: string; verificationCode: string }) => {
     try {
       setLoading(true);
       
-      // 调用登录API
-      await login(values.email, values.password);
+      // 这里应该调用注册API
+      // await axios.post('/api/auth/register', {
+      //   username: values.username,
+      //   email: values.email,
+      //   password: values.password,
+      //   verification_code: values.verificationCode
+      // });
       
-      message.success('登录成功');
-      navigate('/dashboard');
+      message.success('注册成功');
+      navigate('/login');
     } catch (error: any) {
-      console.error('登录失败:', error);
+      console.error('注册失败:', error);
       
       // 解析错误信息
-      let errorMessage = '登录失败，请重试';
+      let errorMessage = '注册失败，请重试';
       if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail;
       } else if (error.message) {
@@ -80,16 +81,9 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // 处理忘记密码
-  const handleForgotPassword = () => {
-    // 这里可以实现忘记密码的逻辑，或者显示提示信息
-    message.info('忘记密码功能暂未实现');
-  };
-
-  // 处理注册
-  const handleRegister = () => {
-    // 导航到注册页面
-    navigate('/register');
+  // 处理返回登录
+  const handleBackToLogin = () => {
+    navigate('/login');
   };
 
   return (
@@ -99,28 +93,11 @@ const LoginPage: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         padding: '24px',
       }}
     >
-      {/* 半透明遮罩，提升表单可读性 */}
-      <div 
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(5px)',
-          zIndex: 1,
-        }}
-      />
-      
-      {/* 登录表单卡片 */}
+      {/* 注册表单卡片 */}
       <Card 
         style={{
           width: 450,
@@ -131,23 +108,39 @@ const LoginPage: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        {/* 登录头部 */}
+        {/* 注册头部 */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <Title level={2} style={{ marginBottom: '8px' }}>
-            {APP_CONFIG.APP_NAME}
+            注册 {APP_CONFIG.APP_NAME}
           </Title>
           <Paragraph type="secondary">
-            {APP_CONFIG.DESCRIPTION}
+            创建您的账户以开始使用系统
           </Paragraph>
         </div>
         
-        {/* 登录表单 */}
+        {/* 注册表单 */}
         <Form
           form={form}
-          name="login"
-          initialValues={{ remember: true }}
-          onFinish={handleLogin}
+          name="register"
+          onFinish={handleRegister}
         >
+          <Form.Item
+            name="username"
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { whitespace: true, message: '用户名不能包含空格' },
+              { min: 3, message: '用户名长度至少为3个字符' },
+              { max: 30, message: '用户名长度不能超过30个字符' },
+            ]}
+          >
+            <Input
+              prefix={<UserOutlined className="site-form-item-icon" />}
+              placeholder="用户名"
+              size="large"
+              autoComplete="username"
+            />
+          </Form.Item>
+          
           <Form.Item
             name="email"
             rules={[
@@ -165,42 +158,76 @@ const LoginPage: React.FC = () => {
           
           <Form.Item
             name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
+            rules={[
+              { required: true, message: '请输入密码' },
+              { min: 8, message: '密码长度至少为8个字符' },
+            ]}
           >
             <Input.Password
               prefix={<LockOutlined className="site-form-item-icon" />}
               placeholder="密码"
               size="large"
-              autoComplete="current-password"
+              autoComplete="new-password"
+            />
+          </Form.Item>
+          
+          <Form.Item
+            name="confirmPassword"
+            dependencies={['password']}
+            rules={[
+              { required: true, message: '请确认密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password
+              prefix={<LockOutlined className="site-form-item-icon" />}
+              placeholder="确认密码"
+              size="large"
+              autoComplete="new-password"
             />
           </Form.Item>
           
           <Form.Item>
-            <Form.Item name="remember" valuePropName="checked" noStyle>
-              <Checkbox 
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <Form.Item
+                name="verificationCode"
+                noStyle
+                rules={[{ required: true, message: '请输入验证码' }]}
               >
-                记住我
-              </Checkbox>
-            </Form.Item>
-            
-            <a className="login-form-forgot" href="#" onClick={handleForgotPassword}>
-              忘记密码?
-            </a>
+                <Input
+                  placeholder="验证码"
+                  size="large"
+                  style={{ flex: 1 }}
+                />
+              </Form.Item>
+              
+              <Button
+                onClick={handleSendVerificationCode}
+                disabled={countdown > 0}
+                size="large"
+              >
+                {countdown > 0 ? `${countdown}秒后重发` : '发送验证码'}
+              </Button>
+            </div>
           </Form.Item>
           
           <Form.Item>
             <Button
               type="primary"
               htmlType="submit"
-              className="login-form-button"
               size="large"
               style={{ width: '100%' }}
               loading={loading}
               disabled={loading}
             >
-              {loading ? <Spin size="small" /> : '登录'}
+              {loading ? <Spin size="small" /> : '注册'}
             </Button>
           </Form.Item>
         </Form>
@@ -211,30 +238,15 @@ const LoginPage: React.FC = () => {
         <div style={{ textAlign: 'center' }}>
           <Button 
             type="link" 
-            onClick={handleRegister}
+            onClick={handleBackToLogin}
             style={{ width: '100%' }}
           >
-            还没有账号? 立即注册
+            已有账号? 立即登录
           </Button>
-        </div>
-        
-        {/* 测试账号信息 */}
-        <div 
-          style={{
-            marginTop: '16px',
-            padding: '12px',
-            backgroundColor: '#f0f2f5',
-            borderRadius: 6,
-            fontSize: '12px',
-          }}
-        >
-          <p style={{ marginBottom: '4px', fontWeight: 'bold' }}>测试账号：</p>
-          <p style={{ marginBottom: '4px' }}>邮箱：admin@example.com</p>
-          <p>密码：12345678</p>
         </div>
       </Card>
     </div>
   );
 };
 
-export default LoginPage;
+export default RegisterPage;

@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List, Any, Optional
 import asyncio
 import aiohttp
-from src.utils.config import settings
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 

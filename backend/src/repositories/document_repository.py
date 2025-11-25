@@ -1,8 +1,8 @@
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from src.services.db_service import db_service
-from src.models.document import Document, DocumentStatus
+from services.db_service import db_service
+from models.document import Document, DocumentStatus
 
 logger = logging.getLogger(__name__)
 

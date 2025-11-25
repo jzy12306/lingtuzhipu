@@ -1,7 +1,7 @@
 // 前端配置文件
 
 // API基础URL
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = 'http://localhost:8000';
 
 // 应用配置
 export const APP_CONFIG = {
@@ -74,6 +74,7 @@ export const APP_CONFIG = {
 // 路由配置
 export const ROUTES = {
   LOGIN: '/login',
+  REGISTER: '/register',
   DASHBOARD: '/dashboard',
   DOCUMENTS: '/documents',
   QUERY: '/query',
@@ -90,6 +91,8 @@ export const API_ENDPOINTS = {
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
     ME: '/api/auth/me',
+    REGISTER: '/api/auth/register',
+    SEND_VERIFICATION_CODE: '/api/auth/send-verification-code',
   },
   
   // 文档管理相关

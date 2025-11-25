@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional, Dict, Any
 
-from src.models.knowledge import (
+from models.knowledge import (
     EntityResponse, RelationResponse, EntityCreate, RelationCreate,
     EntityUpdate, RelationUpdate, KnowledgeGraphQuery, KnowledgeGraphResponse,
     KnowledgeConflictResponse
 )
-from src.repositories.knowledge_repository import knowledge_repository
-from src.repositories.document_repository import document_repository
-from src.utils.dependencies import get_current_user
+from repositories.knowledge_repository import knowledge_repository
+from repositories.document_repository import document_repository
+from utils.dependencies import get_current_user
 
 router = APIRouter()
 

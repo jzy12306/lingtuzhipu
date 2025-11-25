@@ -23,7 +23,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   checkPermission: (permission: string) => boolean;
@@ -79,12 +79,12 @@ export const AuthContextProvider: React.FC<AuthProviderProps> = ({ children }) =
   }, []);
 
   // 登录方法
-  const login = async (username: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
       
       const response = await axios.post(API_ENDPOINTS.AUTH.LOGIN, {
-        username,
+        email,
         password
       });
 

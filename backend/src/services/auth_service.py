@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from src.config.settings import settings
-from src.models.user import User, UserCreate
+from config.settings import settings
+from models.user import User, UserCreate
 
 logger = logging.getLogger(__name__)
 

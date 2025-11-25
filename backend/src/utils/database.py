@@ -5,7 +5,7 @@ import motor.motor_asyncio
 from neo4j import AsyncGraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
-from src.utils.config import settings
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 

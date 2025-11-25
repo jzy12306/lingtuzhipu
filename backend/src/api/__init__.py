@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from src.api.routes import auth, users, documents, knowledge, agents, system
+from api.routes import auth, users, documents, knowledge, agents, system
 
 # 创建主路由
 api_router = APIRouter()

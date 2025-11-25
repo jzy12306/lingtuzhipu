@@ -2,7 +2,7 @@ from langgraph.graph import Graph
 from typing import Dict, Any, Optional
 import asyncio
 import logging
-from src.agents.agent_base import AgentResult
+from agents.agent_base import AgentResult
 
 logger = logging.getLogger(__name__)
 

@@ -4,12 +4,12 @@ from typing import Dict, Any
 import asyncio
 import time
 
-from src.services.db_service import db_service
-from src.services.knowledge_graph_service import knowledge_graph_service
-from src.services.document_service import document_service
-from src.services.llm_service import llm_service
-from src.core.security import get_current_user_optional
-from src.models.user import User
+from services.db_service import db_service
+from services.knowledge_graph_service import knowledge_graph_service
+from services.document_service import document_service
+from services.llm_service import llm_service
+from core.security import get_current_user_optional
+from models.user import User
 
 router = APIRouter()
 

@@ -4,8 +4,8 @@ from jose import JWTError, jwt
 from typing import Optional, Dict, Any
 import os
 
-from src.models.user import User, TokenData
-from src.repositories.user_repository import UserRepository
+from models.user import User, TokenData
+from repositories.user_repository import UserRepository
 
 # 配置
 SECRET_KEY = "your-secret-key-here-change-in-production"
@@ -211,7 +211,7 @@ async def validate_knowledge_permission_legacy(
     
     # 延迟导入避免循环依赖
     if document_repo is None:
-        from src.repositories.document_repository import document_repository
+        from repositories.document_repository import document_repository
         document_repo = document_repository
     
     # 检查关联文档的权限

@@ -1,10 +1,10 @@
 import logging
 from typing import Optional
 
-from src.agents.builder.builder_agent import BuilderAgent
-from src.agents.builder.llm_builder_agent import LLMBuilderAgent
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from agents.builder.builder_agent import BuilderAgent
+from agents.builder.llm_builder_agent import LLMBuilderAgent
+from repositories.knowledge_repository import KnowledgeRepository
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -8,6 +8,11 @@ let agentStatus = {
     extension: { status: 'loading', progress: 60, loaded: 12, total: 20 }
 };
 
+// 生成唯一ID的工具函数
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     initParticleSystem();

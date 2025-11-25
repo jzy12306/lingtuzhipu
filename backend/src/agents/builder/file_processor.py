@@ -9,7 +9,7 @@ import docx
 import markdown
 import csv
 
-from src.utils.config import settings
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 

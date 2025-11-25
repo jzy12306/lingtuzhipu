@@ -2,18 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, 
 from typing import List, Optional, Dict
 from datetime import datetime
 
-from src.models.document import (
+from models.document import (
     Document, DocumentCreate, DocumentUpdate, DocumentResponse, 
     DocumentContent, DocumentQuery, DocumentStats
 )
-from src.repositories.document_repository import DocumentRepository
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.dependencies import get_current_user, validate_document_permission
-from src.utils.file_processing import process_uploaded_file
-from src.services.document_service import DocumentService
-from src.models.user import User
-from src.agents.builder import BuilderAgentService
-from src.utils.config import settings
+from repositories.document_repository import DocumentRepository
+from repositories.knowledge_repository import KnowledgeRepository
+from utils.dependencies import get_current_user, validate_document_permission
+from utils.file_processing import process_uploaded_file
+from services.document_service import DocumentService
+from models.user import User
+from agents.builder import BuilderAgentService
+from utils.config import settings
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 

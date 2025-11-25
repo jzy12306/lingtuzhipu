@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户中心 - 灵图智谱</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .nav-button.active {
+            background-color: #0891b2;
+            color: white;
+        }
+        .nav-button {
+            transition: all 0.2s ease;
+        }
+        .nav-button:hover:not(.active) {
+            background-color: #334155;
+            color: white;
+        }
+        .input-field {
+            background-color: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #0891b2;
+            box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.2);
+        }
+        .btn-primary {
+            background-color: #0891b2;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #0e7490;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: #334155;
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold">灵图智谱</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="index.html" class="text-slate-300 hover:text-white transition-colors">首页</a>
+                    <a href="query.html" class="text-slate-300 hover:text-white transition-colors">知识查询</a>
+                    <a href="graph.html" class="text-slate-300 hover:text-white transition-colors">图谱可视</a>
+                    <a href="admin.html" class="text-slate-300 hover:text-white transition-colors">系统管理</a>
+                    <a href="user-center.html" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">用户中心</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="pt-24 pb-16 px-4 max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center">用户中心</h1>
+        
+        <!-- 用户中心导航栏 -->
+        <div class="card p-4 rounded-xl mb-8">
+            <div class="flex flex-wrap gap-2 justify-center">
+                <button class="nav-button active px-6 py-3 rounded-lg font-medium" data-target="user-management">
+                    用户管理
+                </button>
+                <button class="nav-button px-6 py-3 rounded-lg bg-slate-700 text-slate-300 font-medium" data-target="personal-info">
+                    个人资料
+                </button>
+                <button class="nav-button px-6 py-3 rounded-lg bg-slate-700 text-slate-300 font-medium" data-target="account-security">
+                    账户安全
+                </button>
+                <button class="nav-button px-6 py-3 rounded-lg bg-slate-700 text-slate-300 font-medium" data-target="notification-settings">
+                    通知设置
+                </button>
+            </div>
+        </div>
+        
+        <!-- 用户管理模块 -->
+        <div id="user-management" class="content-section card p-6 rounded-xl">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h2 class="text-2xl font-semibold">用户列表</h2>
+                <button class="btn-primary px-5 py-2 rounded-lg font-medium flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    添加用户
+                </button>
+            </div>
+            
+            <!-- 搜索和筛选 -->
+            <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                <div class="relative flex-1">
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input type="text" placeholder="搜索用户..." class="input-field w-full pl-10 pr-4 py-2 rounded-lg text-white">
+                </div>
+                <select class="input-field px-4 py-2 rounded-lg text-white">
+                    <option value="all">所有用户</option>
+                    <option value="active">活跃用户</option>
+                    <option value="inactive">非活跃用户</option>
+                </select>
+            </div>
+            
+            <!-- 用户列表 -->
+            <div class="space-y-4">
+                <div class="card p-4 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <div class="relative">
+                            <img src="resources/avatars/user1.jpg" alt="管理员" class="w-12 h-12 rounded-full object-cover" />
+                            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900"></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <p class="font-medium text-white truncate">管理员</p>
+                                    <p class="text-sm text-slate-400 truncate">admin@example.com</p>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="px-2 py-0.5 bg-cyan-900/50 text-cyan-400 rounded-full">管理员</span>
+                                    <span class="ml-2 text-slate-400">在线</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-sm text-slate-400">
+                                <span>最后登录: 2025-11-25 14:30</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="p-2 text-slate-400 hover:text-cyan-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button class="p-2 text-slate-400 hover:text-red-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-4 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <div class="relative">
+                            <img src="resources/avatars/user2.jpg" alt="张分析师" class="w-12 h-12 rounded-full object-cover" />
+                            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900"></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <p class="font-medium text-white truncate">张分析师</p>
+                                    <p class="text-sm text-slate-400 truncate">analyst@example.com</p>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="px-2 py-0.5 bg-blue-900/50 text-blue-400 rounded-full">分析师</span>
+                                    <span class="ml-2 text-slate-400">在线</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-sm text-slate-400">
+                                <span>最后登录: 2025-11-25 10:15</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="p-2 text-slate-400 hover:text-cyan-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button class="p-2 text-slate-400 hover:text-red-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-4 rounded-lg">
+                    <div class="flex items-center space-x-4">
+                        <div class="relative">
+                            <img src="resources/avatars/user3.png" alt="李工程师" class="w-12 h-12 rounded-full object-cover" />
+                            <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-slate-900"></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <p class="font-medium text-white truncate">李工程师</p>
+                                    <p class="text-sm text-slate-400 truncate">engineer@example.com</p>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="px-2 py-0.5 bg-indigo-900/50 text-indigo-400 rounded-full">工程师</span>
+                                    <span class="ml-2 text-slate-400">离线</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-sm text-slate-400">
+                                <span>最后登录: 2025-11-24 18:45</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="p-2 text-slate-400 hover:text-cyan-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button class="p-2 text-slate-400 hover:text-red-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 分页 -->
+            <div class="flex justify-center mt-8">
+                <div class="flex items-center space-x-2">
+                    <button class="btn-secondary px-4 py-2 rounded-lg">上一页</button>
+                    <button class="btn-primary px-4 py-2 rounded-lg">1</button>
+                    <button class="btn-secondary px-4 py-2 rounded-lg">下一页</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 个人资料模块 -->
+        <div id="personal-info" class="content-section card p-6 rounded-xl hidden">
+            <h2 class="text-2xl font-semibold mb-6">个人资料</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="md:col-span-1">
+                    <div class="flex flex-col items-center">
+                        <div class="relative mb-4">
+                            <img src="resources/avatars/user1.jpg" alt="用户头像" class="w-32 h-32 rounded-full object-cover border-4 border-slate-700" />
+                            <button class="absolute bottom-0 right-0 w-8 h-8 bg-cyan-600 rounded-full flex items-center justify-center text-white">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-1">管理员</h3>
+                        <p class="text-slate-400 mb-4">admin@example.com</p>
+                        <button class="btn-primary w-full py-2 rounded-lg">上传头像</button>
+                    </div>
+                </div>
+                
+                <div class="md:col-span-2">
+                    <form class="space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">用户名</label>
+                                <input type="text" value="管理员" class="input-field w-full px-4 py-2 rounded-lg text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">邮箱</label>
+                                <input type="email" value="admin@example.com" class="input-field w-full px-4 py-2 rounded-lg text-white">
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">手机号码</label>
+                                <input type="tel" value="13800138000" class="input-field w-full px-4 py-2 rounded-lg text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">用户角色</label>
+                                <input type="text" value="管理员" disabled class="input-field w-full px-4 py-2 rounded-lg text-slate-500">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">个人简介</label>
+                            <textarea rows="4" class="input-field w-full px-4 py-2 rounded-lg text-white">系统管理员，负责系统的日常维护和管理工作。</textarea>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-4 pt-4">
+                            <button type="button" class="btn-secondary px-6 py-2 rounded-lg">取消</button>
+                            <button type="submit" class="btn-primary px-6 py-2 rounded-lg">保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 账户安全模块 -->
+        <div id="account-security" class="content-section card p-6 rounded-xl hidden">
+            <h2 class="text-2xl font-semibold mb-6">账户安全</h2>
+            
+            <div class="space-y-6">
+                <div class="card p-5 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-medium mb-1">修改密码</h3>
+                            <p class="text-sm text-slate-400">建议定期更换密码，确保账户安全</p>
+                        </div>
+                        <button class="btn-primary px-5 py-2 rounded-lg self-start sm:self-auto">
+                            修改密码
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card p-5 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-medium mb-1">邮箱验证</h3>
+                            <p class="text-sm text-slate-400">admin@example.com</p>
+                        </div>
+                        <div class="flex items-center space-x-3 self-start sm:self-auto">
+                            <span class="px-2 py-1 bg-green-900/50 text-green-400 rounded-full text-sm">已验证</span>
+                            <button class="btn-secondary px-5 py-2 rounded-lg">重新验证</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-5 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-medium mb-1">手机验证</h3>
+                            <p class="text-sm text-slate-400">138****8000</p>
+                        </div>
+                        <div class="flex items-center space-x-3 self-start sm:self-auto">
+                            <span class="px-2 py-1 bg-green-900/50 text-green-400 rounded-full text-sm">已验证</span>
+                            <button class="btn-secondary px-5 py-2 rounded-lg">更换手机</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-5 rounded-lg">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-medium mb-1">双因素认证</h3>
+                            <p class="text-sm text-slate-400">开启后登录时需要额外验证</p>
+                        </div>
+                        <div class="flex items-center space-x-3 self-start sm:self-auto">
+                            <span class="px-2 py-1 bg-red-900/50 text-red-400 rounded-full text-sm">未开启</span>
+                            <button class="btn-primary px-5 py-2 rounded-lg">开启</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-5 rounded-lg">
+                    <h3 class="text-lg font-medium mb-4">登录历史</h3>
+                    <div class="space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between text-sm">
+                            <div>
+                                <p class="mb-1">2025-11-25 14:30:25</p>
+                                <p class="text-slate-400">Windows 10 · Chrome 120.0.0.0 · 北京市</p>
+                            </div>
+                            <span class="text-green-400 mt-2 sm:mt-0">当前登录</span>
+                        </div>
+                        <div class="border-t border-slate-700 pt-4 flex flex-col sm:flex-row sm:items-center justify-between text-sm">
+                            <div>
+                                <p class="mb-1">2025-11-24 18:15:42</p>
+                                <p class="text-slate-400">Mac OS X · Safari 17.0 · 上海市</p>
+                            </div>
+                            <span class="text-slate-400 mt-2 sm:mt-0">已下线</span>
+                        </div>
+                        <div class="border-t border-slate-700 pt-4 flex flex-col sm:flex-row sm:items-center justify-between text-sm">
+                            <div>
+                                <p class="mb-1">2025-11-23 09:45:12</p>
+                                <p class="text-slate-400">Android 14 · Chrome Mobile 120.0.0.0 · 广州市</p>
+                            </div>
+                            <span class="text-slate-400 mt-2 sm:mt-0">已下线</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 通知设置模块 -->
+        <div id="notification-settings" class="content-section card p-6 rounded-xl hidden">
+            <h2 class="text-2xl font-semibold mb-6">通知设置</h2>
+            
+            <div class="space-y-6">
+                <div class="card p-5 rounded-lg">
+                    <h3 class="text-lg font-medium mb-4">系统通知</h3>
+                    
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">系统公告</label>
+                                <p class="text-sm text-slate-400">接收系统重要公告和更新信息</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                        
+                        <div class="border-t border-slate-700 pt-4 flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">操作日志提醒</label>
+                                <p class="text-sm text-slate-400">接收账户重要操作日志通知</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                        
+                        <div class="border-t border-slate-700 pt-4 flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">数据更新提醒</label>
+                                <p class="text-sm text-slate-400">接收数据更新和同步完成通知</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card p-5 rounded-lg">
+                    <h3 class="text-lg font-medium mb-4">接收方式</h3>
+                    
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">站内通知</label>
+                                <p class="text-sm text-slate-400">在系统内接收通知消息</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                        
+                        <div class="border-t border-slate-700 pt-4 flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">邮件通知</label>
+                                <p class="text-sm text-slate-400">通过邮件接收重要通知</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                        
+                        <div class="border-t border-slate-700 pt-4 flex items-center justify-between">
+                            <div>
+                                <label class="font-medium">短信通知</label>
+                                <p class="text-sm text-slate-400">通过短信接收紧急通知</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end">
+                    <button class="btn-primary px-6 py-2 rounded-lg">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 导航切换功能
+            const navButtons = document.querySelectorAll('.nav-button');
+            const contentSections = document.querySelectorAll('.content-section');
+            
+            navButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // 移除所有按钮的active状态
+                    navButtons.forEach(btn => {
+                        btn.classList.remove('active', 'bg-cyan-600', 'text-white');
+                        btn.classList.add('bg-slate-700', 'text-slate-300');
+                    });
+                    
+                    // 激活当前按钮
+                    this.classList.add('active', 'bg-cyan-600', 'text-white');
+                    this.classList.remove('bg-slate-700', 'text-slate-300');
+                    
+                    // 隐藏所有内容区域
+                    contentSections.forEach(section => {
+                        section.classList.add('hidden');
+                    });
+                    
+                    // 显示对应内容区域
+                    const target = this.getAttribute('data-target');
+                    document.getElementById(target).classList.remove('hidden');
+                });
+            });
+            
+            // 用户管理模块交互
+            // 添加用户按钮
+            document.querySelector('.btn-primary').addEventListener('click', function() {
+                alert('添加用户功能待实现');
+                // 这里可以实现打开添加用户模态框的逻辑
+            });
+            
+            // 搜索框功能
+            const searchInput = document.querySelector('input[placeholder="搜索用户..."]');
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                const userCards = document.querySelectorAll('#user-management .card');
+                
+                userCards.forEach(card => {
+                    const userName = card.querySelector('.font-medium').textContent.toLowerCase();
+                    const userEmail = card.querySelector('.text-slate-400').textContent.toLowerCase();
+                    
+                    if (userName.includes(searchTerm) || userEmail.includes(searchTerm)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+            
+            // 筛选下拉框功能
+            const filterSelect = document.querySelector('select');
+            filterSelect.addEventListener('change', function() {
+                const filterValue = this.value;
+                const userCards = document.querySelectorAll('#user-management .card');
+                
+                userCards.forEach(card => {
+                    const userStatus = card.querySelector('.text-slate-400:last-child').textContent;
+                    
+                    if (filterValue === 'all' || 
+                        (filterValue === 'active' && userStatus === '在线') ||
+                        (filterValue === 'inactive' && userStatus === '离线')) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+            
+            // 编辑用户按钮
+            const editButtons = document.querySelectorAll('#user-management .text-cyan-400');
+            editButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const userName = this.closest('.card').querySelector('.font-medium').textContent;
+                    alert(`编辑用户：${userName}`);
+                    // 这里可以实现打开编辑用户模态框的逻辑
+                });
+            });
+            
+            // 删除用户按钮
+            const deleteButtons = document.querySelectorAll('#user-management .text-red-400');
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const userName = this.closest('.card').querySelector('.font-medium').textContent;
+                    if (confirm(`确定要删除用户「${userName}」吗？此操作不可撤销。`)) {
+                        alert(`用户「${userName}」已删除`);
+                        // 这里可以实现删除用户的逻辑
+                    }
+                });
+            });
+            
+            // 分页按钮
+            const pageButtons = document.querySelectorAll('#user-management button');
+            pageButtons.forEach(button => {
+                if (button.textContent === '上一页' || button.textContent === '下一页') {
+                    button.addEventListener('click', function() {
+                        alert(`分页功能：${this.textContent}`);
+                    });
+                }
+            });
+            
+            // 个人资料模块交互
+            // 上传头像按钮
+            document.querySelector('#personal-info .btn-primary').addEventListener('click', function() {
+                alert('请选择要上传的头像图片');
+                // 这里可以实现文件选择对话框
+            });
+            
+            // 保存修改按钮
+            document.querySelector('#personal-info button[type="submit"]').addEventListener('click', function(e) {
+                e.preventDefault();
+                alert('个人资料已保存');
+                // 这里可以实现表单提交的逻辑
+            });
+            
+            // 取消按钮
+            document.querySelector('#personal-info button[type="button"]').addEventListener('click', function() {
+                if (confirm('确定要取消修改吗？未保存的更改将会丢失。')) {
+                    alert('已取消修改');
+                    // 这里可以实现重置表单的逻辑
+                }
+            });
+            
+            // 账户安全模块交互
+            // 修改密码按钮
+            document.querySelector('#account-security .btn-primary:first-of-type').addEventListener('click', function() {
+                alert('修改密码功能待实现');
+                // 这里可以实现打开修改密码模态框的逻辑
+            });
+            
+            // 重新验证按钮
+            document.querySelector('#account-security .btn-secondary').addEventListener('click', function() {
+                alert('验证邮件已发送，请查收邮件并完成验证');
+            });
+            
+            // 更换手机按钮
+            document.querySelectorAll('#account-security .btn-secondary')[1].addEventListener('click', function() {
+                alert('更换手机功能待实现');
+            });
+            
+            // 开启双因素认证按钮
+            document.querySelector('#account-security .btn-primary:last-of-type').addEventListener('click', function() {
+                alert('双因素认证功能待实现');
+            });
+            
+            // 通知设置模块交互
+            // 保存设置按钮
+            document.querySelector('#notification-settings .btn-primary').addEventListener('click', function() {
+                alert('通知设置已保存');
+            });
+            
+            // 复选框交互效果
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    console.log(`通知选项更新: ${this.closest('div').previousElementSibling.querySelector('label').textContent} - ${this.checked ? '开启' : '关闭'}`);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

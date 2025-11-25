@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from typing import List, Optional
 import io
 
-from src.models.document import DocumentResponse, DocumentUpdate, DocumentCreate, DocumentType, DocumentStatus
-from src.repositories.document_repository import document_repository
-from src.repositories.knowledge_repository import knowledge_repository
-from src.utils.dependencies import get_current_user
-from src.utils.file_processing import process_uploaded_file
-from src.agents import process_document_with_workflow
+from models.document import DocumentResponse, DocumentUpdate, DocumentCreate, DocumentType, DocumentStatus
+from repositories.document_repository import document_repository
+from repositories.knowledge_repository import knowledge_repository
+from utils.dependencies import get_current_user
+from utils.file_processing import process_uploaded_file
+from agents import process_document_with_workflow
 
 router = APIRouter()
 
