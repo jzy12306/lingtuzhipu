@@ -3,9 +3,10 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from src.models.knowledge import Entity, Relation, Document
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from models.knowledge import Entity, Relation
+from models.document import Document
+from repositories.knowledge_repository import KnowledgeRepository
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 

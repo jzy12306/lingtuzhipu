@@ -2,16 +2,18 @@ import logging
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from src.services.db_service import DBService
-from src.services.llm_service import LLMService
-from src.services.document_service import DocumentService
-from src.services.knowledge_graph_service import KnowledgeGraphService
-from src.services.analyst_agent import AnalystAgent
-from src.repositories.user_repository import UserRepository
-from src.repositories.document_repository import DocumentRepository
-from src.repositories.query_history_repository import QueryHistoryRepository
-from src.schemas.user import UserCreate, UserRole
-from src.core.security import get_password_hash
+from services.db_service import DatabaseService
+from services.llm_service import LLMService
+from services.document_service import DocumentService
+from services.knowledge_graph_service import KnowledgeGraphService
+from services.analyst_agent import AnalystAgent
+from repositories.user_repository import UserRepository
+from repositories.document_repository import DocumentRepository
+from repositories.knowledge_repository import KnowledgeRepository
+from repositories.query_history_repository import QueryHistoryRepository
+from services.analyst_agent_service import AnalystAgentService
+from schemas.user import UserCreate, UserRole
+from core.security import get_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +34,21 @@ class ServiceFactory:
         """初始化服务工厂"""
         if not self._initialized:
             self._initialized = True
-            self._db_service: Optional[DBService] = None
+            self._db_service: Optional[DatabaseService] = None
             self._llm_service: Optional[LLMService] = None
             self._document_service: Optional[DocumentService] = None
             self._knowledge_graph_service: Optional[KnowledgeGraphService] = None
             self._analyst_agent: Optional[AnalystAgent] = None
             self._user_repository: Optional[UserRepository] = None
             self._document_repository: Optional[DocumentRepository] = None
+            self._knowledge_repository: Optional[KnowledgeRepository] = None
             self._query_history_repository: Optional[QueryHistoryRepository] = None
     
     @property
-    def db_service(self) -> DBService:
+    def db_service(self) -> DatabaseService:
         """获取数据库服务实例"""
         if self._db_service is None:
-            self._db_service = DBService()
+            self._db_service = DatabaseService()
         return self._db_service
     
     @property
@@ -56,10 +59,20 @@ class ServiceFactory:
         return self._llm_service
     
     @property
+    def knowledge_repository(self) -> KnowledgeRepository:
+        """获取知识仓库实例"""
+        if self._knowledge_repository is None:
+            self._knowledge_repository = KnowledgeRepository()
+        return self._knowledge_repository
+    
+    @property
     def document_service(self) -> DocumentService:
         """获取文档服务实例"""
         if self._document_service is None:
-            self._document_service = DocumentService()
+            self._document_service = DocumentService(
+                document_repository=self.document_repository,
+                knowledge_repository=self.knowledge_repository
+            )
         return self._document_service
     
     @property
@@ -73,13 +86,20 @@ class ServiceFactory:
     def analyst_agent(self) -> AnalystAgent:
         """获取分析师智能体实例"""
         if self._analyst_agent is None:
-            # 确保依赖服务已初始化
-            self._analyst_agent = AnalystAgent(
-                llm_service=self.llm_service,
-                knowledge_graph_service=self.knowledge_graph_service,
+            self._analyst_agent = AnalystAgent()
+        return self._analyst_agent
+    
+    @property
+    def analyst_agent_service(self):
+        """
+        获取分析师代理服务实例
+        """
+        if not hasattr(self, '_analyst_agent_service'):
+            self._analyst_agent_service = AnalystAgentService(
+                knowledge_repository=self.knowledge_repository,
                 document_service=self.document_service
             )
-        return self._analyst_agent
+        return self._analyst_agent_service
     
     @property
     def user_repository(self) -> UserRepository:
@@ -108,7 +128,7 @@ class ServiceFactory:
             logger.info("开始初始化所有服务...")
             
             # 初始化数据库服务
-            await self.db_service.connect()
+            await self.db_service.initialize()
             logger.info("数据库服务初始化完成")
             
             # 初始化知识图谱服务

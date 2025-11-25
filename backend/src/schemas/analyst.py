@@ -3,8 +3,10 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 
+from enum import Enum
+
 # 查询复杂度枚举
-class QueryComplexity(str):
+class QueryComplexity(str, Enum):
     SIMPLE = "simple"
     MODERATE = "moderate"
     COMPLEX = "complex"
@@ -12,7 +14,7 @@ class QueryComplexity(str):
 
 
 # 分析类型枚举
-class AnalysisType(str):
+class AnalysisType(str, Enum):
     COMPREHENSIVE = "comprehensive"
     SUMMARIZATION = "summarization"
     ENTITY_RECOGNITION = "entity_recognition"

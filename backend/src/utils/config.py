@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     
     # 文件上传设置
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
+    # 默认允许的文件扩展名列表
     ALLOWED_EXTENSIONS: List[str] = [
         ".txt", ".md", ".pdf", ".doc", ".docx", ".csv", ".json", ".xml"
     ]
@@ -61,8 +62,7 @@ class Settings(BaseSettings):
     AUDITOR_AGENT_ENABLED: bool = True
     
     class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+        # 不使用.env文件，直接使用代码中的默认值和os.getenv获取的环境变量
         case_sensitive = True
 
 

@@ -2,10 +2,10 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
 
-from src.models.document import Document, DocumentCreate, DocumentUpdate, DocumentQuery, DocumentStats
-from src.repositories.document_repository import DocumentRepository
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.agents.builder import BuilderAgentService
+from models.document import Document, DocumentCreate, DocumentUpdate, DocumentQuery, DocumentStats
+from repositories.document_repository import DocumentRepository
+from repositories.knowledge_repository import KnowledgeRepository
+from agents.builder import BuilderAgentService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,31 @@ class DocumentService:
                  knowledge_repository: KnowledgeRepository):
         self.document_repository = document_repository
         self.knowledge_repository = knowledge_repository
+        self.initialized = False
+        self.logger = logger.getChild("DocumentService")
+    
+    async def initialize(self):
+        """
+        初始化文档服务
+        在开发环境中简化初始化
+        """
+        try:
+            self.logger.info("文档服务初始化 (开发模式)")
+            self.initialized = True
+            return self
+        except Exception as e:
+            self.logger.warning(f"文档服务初始化发生警告: {str(e)}")
+            self.initialized = True
+            return self
+    
+    async def shutdown(self):
+        """
+        关闭文档服务
+        """
+        try:
+            self.logger.info("文档服务已关闭")
+        except Exception as e:
+            self.logger.warning(f"文档服务关闭发生错误: {str(e)}")
     
     async def create_document(self, document_data: DocumentCreate, user_id: str) -> Document:
         """创建新文档"""
@@ -154,3 +179,18 @@ class DocumentService:
         
         # 删除文档
         return await self.document_repository.delete_document(document_id)
+
+# 创建全局document_service实例以解决导入错误
+document_service: Optional[DocumentService] = None
+
+def get_document_service() -> DocumentService:
+    """获取document_service实例"""
+    global document_service
+    if document_service is None:
+        raise ValueError("DocumentService instance has not been initialized")
+    return document_service
+
+def set_document_service(service: DocumentService) -> None:
+    """设置document_service实例"""
+    global document_service
+    document_service = service

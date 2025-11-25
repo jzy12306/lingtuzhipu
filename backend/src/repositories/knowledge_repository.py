@@ -2,13 +2,13 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from bson import ObjectId
-from src.services.db_service import db_service
-from src.models.knowledge import (
+from services.db_service import db_service
+from models.knowledge import (
     Entity, EntityCreate, EntityUpdate, EntityResponse,
     Relation, RelationCreate, RelationUpdate, RelationResponse,
-    KnowledgeStats, KnowledgeGraphPath,
-    KnowledgeGraphQuery, KnowledgeGraphResponse, KnowledgeConflict,
-    GraphVisualization, EntityNode, RelationEdge
+    KnowledgeGraphQuery, KnowledgeGraphResponse,
+    KnowledgeConflict, GraphVisualization, EntityNode, RelationEdge,
+    KnowledgeGraphQueryAdvanced, KnowledgeStats, KnowledgeGraphPath
 )
 import uuid
 from pymongo import MongoClient
@@ -27,6 +27,48 @@ class KnowledgeRepository:
             self.entities_collection = mongo_client.kimi.entities
             self.relations_collection = mongo_client.kimi.relations
         self.logger = logger.getChild("KnowledgeRepository")
+    
+    async def search_entities(self, query: str) -> List[Dict[str, Any]]:
+        """根据查询搜索实体
+        
+        Args:
+            query: 搜索查询字符串
+            
+        Returns:
+            实体列表
+        """
+        try:
+            driver = await self.get_neo4j_driver()
+            
+            # 使用Neo4j的全文搜索或模糊匹配查找实体
+            search_query = """
+            MATCH (e:Entity)
+            WHERE e.is_valid = true AND 
+                  (e.name CONTAINS $query OR e.type CONTAINS $query)
+            RETURN e
+            LIMIT 50
+            """
+            
+            async with driver.session() as session:
+                result = await session.run(search_query, query=query)
+                entities = []
+                
+                async for record in result:
+                    entity_node = record["e"]
+                    entity = {
+                        "id": entity_node.get("id"),
+                        "name": entity_node.get("name"),
+                        "type": entity_node.get("type"),
+                        "confidence_score": entity_node.get("confidence_score"),
+                        "source_document_id": entity_node.get("source_document_id")
+                    }
+                    entities.append(entity)
+                
+                return entities
+                
+        except Exception as e:
+            self.logger.error(f"搜索实体时发生错误: {str(e)}")
+            raise
     
     async def get_neo4j_driver(self):
         """获取Neo4j驱动"""
@@ -304,6 +346,49 @@ class KnowledgeRepository:
                 return entities
         except Exception as e:
             self.logger.error(f"查找文档实体失败: {str(e)}")
+            raise
+    
+    async def search_entities(self, query: str) -> List[Entity]:
+        """根据查询条件搜索实体"""
+        try:
+            # 使用Neo4j的全文搜索功能，在实体名称和属性中搜索
+            search_query = """
+            MATCH (e:Entity)
+            WHERE toLower(e.name) CONTAINS toLower($query) AND e.is_valid = true
+            RETURN e
+            ORDER BY e.confidence_score DESC
+            LIMIT 100
+            """
+            
+            driver = await self.get_neo4j_driver()
+            async with driver.session() as session:
+                result = await session.run(search_query, query=query)
+                entities = []
+                
+                async for record in result:
+                    entity_node = record["e"]
+                    entity_dict = {
+                        "id": entity_node["id"],
+                        "name": entity_node["name"],
+                        "type": entity_node["type"],
+                        "confidence_score": entity_node["confidence_score"],
+                        "is_valid": entity_node["is_valid"],
+                        "source_document_id": entity_node["source_document_id"],
+                        "created_at": datetime.fromisoformat(entity_node["created_at"]),
+                        "updated_at": datetime.fromisoformat(entity_node["updated_at"]),
+                        "properties": {}
+                    }
+                    
+                    # 添加额外属性
+                    for key, value in entity_node.items():
+                        if key not in entity_dict:
+                            entity_dict["properties"][key] = value
+                    
+                    entities.append(Entity(**entity_dict))
+                
+                return entities
+        except Exception as e:
+            self.logger.error(f"搜索实体失败: {str(e)}")
             raise
     
     async def find_relations_by_document(self, document_id: str) -> List[Relation]:

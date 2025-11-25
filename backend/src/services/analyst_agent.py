@@ -6,11 +6,11 @@ from typing import List, Dict, Any, Optional, Union, AsyncGenerator
 from datetime import datetime
 import re
 
-from src.services.llm_service import llm_service
-from src.services.knowledge_graph_service import knowledge_graph_service
-from src.services.document_service import document_service
-from src.repositories.query_history_repository import QueryHistoryRepository
-from src.schemas.analyst import QueryComplexity
+from services.llm_service import llm_service
+from services.knowledge_graph_service import knowledge_graph_service
+from services.document_service import document_service
+from repositories.query_history_repository import QueryHistoryRepository
+from schemas.analyst import QueryComplexity
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +110,8 @@ class AnalystAgent:
             raise
     
     async def stream_query_processing(self, query: str, user_context: Dict[str, Any],
-                                    document_ids: Optional[List[str]] = None)
-                                    -> AsyncGenerator[Dict[str, Any], None]:
+                                    document_ids: Optional[List[str]] = None) -> AsyncGenerator[Dict[str, Any], None]:
+
         """流式处理查询"""
         try:
             # 流式返回处理步骤

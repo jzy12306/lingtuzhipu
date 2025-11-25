@@ -3,12 +3,12 @@ import time
 import logging
 from typing import Dict, Any
 from fastapi import Request, Response, HTTPException, status
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from collections import defaultdict
 import asyncio
 from functools import wraps
 
-from src.core.performance import performance_config
+from core.performance import performance_config
 
 logger = logging.getLogger(__name__)
 

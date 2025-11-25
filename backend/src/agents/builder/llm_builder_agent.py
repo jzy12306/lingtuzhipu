@@ -7,10 +7,11 @@ from datetime import datetime
 import openai
 from openai import OpenAI
 
-from src.agents.builder.builder_agent import BuilderAgent
-from src.models.knowledge import Entity, Relation, Document
-from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from agents.builder.builder_agent import BuilderAgent
+from models.knowledge import Entity, Relation
+from models.document import Document
+from repositories.knowledge_repository import KnowledgeRepository
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -327,7 +328,7 @@ class LLMBuilderAgent(BuilderAgent):
         "name": "实体名称",
         "type": "实体类型（如人物、组织、地点、事件、概念等）",
         "description": "实体的简要描述",
-        "properties": {}
+        "properties": {{}}
     }
 ]
 
@@ -349,7 +350,7 @@ class LLMBuilderAgent(BuilderAgent):
     
     def _prepare_relation_extraction_prompt(self, content: str, entities: List[Entity]) -> str:
         """准备关系提取提示词"""
-        entities_str = "\n".join([f"- {e.name} ({e.type})"] for e in entities[:50])  # 限制实体数量
+        entities_str = "\n".join([f"- {e.name} ({e.type})" for e in entities[:50]])  # 限制实体数量
         
         return f"""
 请从以下文本中提取实体之间的关系。
@@ -367,7 +368,7 @@ class LLMBuilderAgent(BuilderAgent):
         "target": "目标实体名称",
         "type": "关系类型（如包含、属于、发生于、创建于等）",
         "description": "关系的简要描述",
-        "properties": {}
+        "properties": {{}}
     }
 ]
 

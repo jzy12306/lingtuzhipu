@@ -1,4 +1,7 @@
-from langgraph.graph import Graph, StateGraph, START, END
+from langgraph.graph import Graph, StateGraph
+# 在新版本LangGraph中，START和END通常使用字符串常量
+START = "__start__"
+END = "__end__"
 from langgraph.checkpoint.memory import MemorySaver
 from typing import Dict, Any, Optional, List, Callable
 import logging
