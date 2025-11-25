@@ -1,9 +1,9 @@
 """智能体系统包"""
 
-from agents.agent_base import BaseAgent, AgentResult
-from agents.agent_manager import agent_manager
-from agents.workflow import AgentWorkflow, WorkflowNode, workflow_manager
-from agents.langgraph_integration import langgraph_integration
+from src.agents.agent_base import BaseAgent, AgentResult
+from src.agents.agent_manager import agent_manager
+from src.agents.workflow import AgentWorkflow, WorkflowNode, workflow_manager
+from src.agents.langgraph_integration import langgraph_integration
 
 __all__ = [
     "BaseAgent",

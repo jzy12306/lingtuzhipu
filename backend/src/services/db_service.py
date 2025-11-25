@@ -8,7 +8,7 @@ import asyncio
 import atexit
 from pymongo import ASCENDING
 from pymongo.errors import PyMongoError
-from config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

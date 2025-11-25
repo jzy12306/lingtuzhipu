@@ -7,9 +7,9 @@ import secrets
 import string
 from typing import Optional
 
-from models.user import User, UserCreate, UserUpdate, UserResponse, Token, TokenData, UserLogin, VerificationCode
-from repositories.user_repository import UserRepository
-from services.email_service import email_service
+from src.models.user import User, UserCreate, UserUpdate, UserResponse, Token, TokenData, UserLogin, VerificationCode
+from src.repositories.user_repository import UserRepository
+from src.services.email_service import email_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

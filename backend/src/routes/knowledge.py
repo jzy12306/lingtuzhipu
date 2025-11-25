@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Tuple
 
-from models.knowledge import (
+from src.models.knowledge import (
     Entity, EntityCreate, EntityUpdate, EntityResponse,
     Relation, RelationCreate, RelationUpdate, RelationResponse,
     KnowledgeStats, KnowledgeGraphPath, GraphVisualization,
     KnowledgeGraphQuery, KnowledgeGraphQueryAdvanced, KnowledgeConflict
 )
-from repositories.knowledge_repository import KnowledgeRepository
-from utils.dependencies import get_current_user, validate_knowledge_permission
-from models.user import User
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.utils.dependencies import get_current_user, validate_knowledge_permission
+from src.models.user import User
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 

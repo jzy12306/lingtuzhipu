@@ -7,11 +7,11 @@ from datetime import datetime
 import openai
 from openai import OpenAI
 
-from agents.builder.builder_agent import BuilderAgent
-from models.knowledge import Entity, Relation
-from models.document import Document
-from repositories.knowledge_repository import KnowledgeRepository
-from utils.config import settings
+from src.agents.builder.builder_agent import BuilderAgent
+from src.models.knowledge import Entity, Relation
+from src.models.document import Document
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.utils.config import settings
 
 logger = logging.getLogger(__name__)
 

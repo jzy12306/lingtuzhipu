@@ -4,8 +4,8 @@ from jose import JWTError, jwt
 from typing import Optional, Dict, Any
 import os
 
-from models.user import User, TokenData
-from repositories.user_repository import UserRepository
+from src.models.user import User, TokenData
+from src.repositories.user_repository import UserRepository
 
 # 配置
 SECRET_KEY = "your-secret-key-here-change-in-production"

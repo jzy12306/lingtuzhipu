@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, List
-from services.analyst_agent import analyst_agent
-from repositories.knowledge_repository import KnowledgeRepository
-from services.document_service import DocumentService
+from src.services.analyst_agent import analyst_agent
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.services.document_service import DocumentService
 
 
 class AnalystAgentService:

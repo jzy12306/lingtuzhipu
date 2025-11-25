@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, Optional, List
 import httpx
 from openai import AsyncOpenAI, OpenAIError
-from config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

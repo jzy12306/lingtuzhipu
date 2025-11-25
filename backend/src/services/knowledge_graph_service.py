@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Optional, Any
-from repositories.knowledge_repository import KnowledgeRepository
-from models.knowledge import KnowledgeGraphQuery, KnowledgeGraphResponse
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.models.knowledge import KnowledgeGraphQuery, KnowledgeGraphResponse
 
 logger = logging.getLogger(__name__)
 

@@ -2,10 +2,10 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
 
-from models.document import Document, DocumentCreate, DocumentUpdate, DocumentQuery, DocumentStats
-from repositories.document_repository import DocumentRepository
-from repositories.knowledge_repository import KnowledgeRepository
-from agents.builder import BuilderAgentService
+from src.models.document import Document, DocumentCreate, DocumentUpdate, DocumentQuery, DocumentStats
+from src.repositories.document_repository import DocumentRepository
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.agents.builder import BuilderAgentService
 
 logger = logging.getLogger(__name__)
 

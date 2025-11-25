@@ -8,7 +8,7 @@ from collections import defaultdict
 import asyncio
 from functools import wraps
 
-from core.performance import performance_config
+from src.core.performance import performance_config
 
 logger = logging.getLogger(__name__)
 

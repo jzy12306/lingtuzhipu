@@ -2,8 +2,8 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from bson import ObjectId
-from services.db_service import db_service
-from models.knowledge import (
+from src.services.db_service import db_service
+from src.models.knowledge import (
     Entity, EntityCreate, EntityUpdate, EntityResponse,
     Relation, RelationCreate, RelationUpdate, RelationResponse,
     KnowledgeGraphQuery, KnowledgeGraphResponse,

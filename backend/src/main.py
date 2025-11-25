@@ -7,9 +7,13 @@ import uvicorn
 import sys
 
 # 使用服务工厂和路由管理器
-from services.service_factory import service_factory, UserCreate, get_password_hash
-from routes.router_manager import router_manager
-from middleware.rate_limiter import RateLimitMiddleware
+from src.services.service_factory import ServiceFactory, UserCreate
+from src.core.security import get_password_hash
+from src.routes.router_manager import router_manager
+from src.middleware.rate_limiter import RateLimitMiddleware
+
+# 初始化服务工厂实例
+service_factory = ServiceFactory()
 
 # 配置日志
 logging.basicConfig(

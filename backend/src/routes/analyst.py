@@ -7,16 +7,16 @@ import json
 import logging
 import time
 from datetime import datetime
-from utils.config import settings
+from src.utils.config import settings
 
-from core.security import get_current_user
-from models.user import User
-from services.analyst_agent import analyst_agent
-from services.document_service import document_service
-from services.knowledge_graph_service import knowledge_graph_service
-from services.analyst_agent_service import AnalystAgentService
-from repositories.knowledge_repository import KnowledgeRepository
-from schemas.analyst import (
+from src.core.security import get_current_user
+from src.models.user import User
+from src.services.analyst_agent import analyst_agent
+from src.services.document_service import document_service
+from src.services.knowledge_graph_service import knowledge_graph_service
+from src.services.analyst_agent_service import AnalystAgentService
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.schemas.analyst import (
     QueryRequest, QueryResponse, QueryHistory, 
     CodeExecutionRequest, CodeExecutionResult,
     AnalysisRequest, AnalysisResult,

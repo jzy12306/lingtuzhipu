@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List, Any
-from agents.agent_base import BaseAgent
+from src.agents.agent_base import BaseAgent
 import logging
 from fastapi import HTTPException
 

@@ -2,8 +2,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 
-from services.db_service import db_service
-from schemas.analyst import QueryComplexity
+from src.services.db_service import db_service
+from src.schemas.analyst import QueryComplexity
 
 logger = logging.getLogger(__name__)
 
