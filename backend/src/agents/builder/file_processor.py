@@ -6,8 +6,14 @@ from abc import ABC, abstractmethod
 
 import PyPDF2
 import docx
-import markdown
 import csv
+
+# 条件导入 markdown
+try:
+    import markdown
+    MARKDOWN_AVAILABLE = True
+except ImportError:
+    MARKDOWN_AVAILABLE = False
 
 from utils.config import settings
 
@@ -80,7 +86,7 @@ class FileProcessor(ABC):
         
         # 检查文件扩展名
         extension = os.path.splitext(file_path)[1].lower()
-        if extension not in settings.ALLOWED_EXTENSIONS:
+        if extension not in settings.allowed_extensions_list:
             return False, f"不支持的文件类型: {extension}"
         
         return True, None
@@ -100,11 +106,13 @@ class TextFileProcessor(FileProcessor):
             # 尝试不同的编码读取文件
             encodings = ['utf-8', 'utf-16', 'latin-1', 'gbk', 'gb2312']
             content = ""
+            detected_encoding = 'unknown'
             
             for encoding in encodings:
                 try:
                     with open(file_path, 'r', encoding=encoding) as f:
                         content = f.read()
+                    detected_encoding = encoding
                     break
                 except UnicodeDecodeError:
                     continue
@@ -114,7 +122,7 @@ class TextFileProcessor(FileProcessor):
             
             metadata = {
                 'file_type': 'text',
-                'encoding': encoding,
+                'encoding': detected_encoding,
                 'line_count': len(content.split('\n')),
                 'char_count': len(content)
             }
@@ -215,13 +223,18 @@ class MarkdownProcessor(FileProcessor):
             with open(file_path, 'r', encoding='utf-8') as f:
                 md_content = f.read()
             
-            # 转换为纯文本
-            html = markdown.markdown(md_content)
-            # 简单的HTML转纯文本
-            import re
-            content = re.sub('<[^<]+?>', '', html)
+            if MARKDOWN_AVAILABLE:
+                # 转换为纯文本
+                html = markdown.markdown(md_content)
+                # 简单的HTML转纯文本
+                import re
+                content = re.sub('<[^<]+?>', '', html)
+            else:
+                # 如果没有markdown模块，直接使用原始内容
+                content = md_content
             
             # 计算Markdown元素数量
+            import re
             heading_count = len(re.findall(r'^#+ ', md_content, re.MULTILINE))
             list_count = len(re.findall(r'^[*+-] ', md_content, re.MULTILINE)) + \
                         len(re.findall(r'^\d+\. ', md_content, re.MULTILINE))
@@ -230,7 +243,8 @@ class MarkdownProcessor(FileProcessor):
                 'file_type': 'markdown',
                 'heading_count': heading_count,
                 'list_count': list_count,
-                'char_count': len(content)
+                'char_count': len(content),
+                'markdown_available': MARKDOWN_AVAILABLE
             }
             
             logger.info(f"成功处理Markdown文件: {file_path}, 标题数: {heading_count}")

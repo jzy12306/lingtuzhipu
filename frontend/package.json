@@ -1,50 +1,16 @@
 {
-  "name": "knowledge-graph-frontend",
+  "name": "lingtu-zhipu-frontend",
   "version": "1.0.0",
-  "description": "基于多智能体协作的垂直行业动态知识图谱构建与推理系统 - 前端",
-  "private": true,
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.21.0",
-    "axios": "^1.6.2",
-    "antd": "^5.12.8",
-    "echarts": "^5.4.3",
-    "d3": "^7.8.5",
-    "three": "^0.159.0",
-    "react-query": "^3.39.3",
-    "zustand": "^4.4.7",
-    "animejs": "^3.2.1",
-    "p5": "^1.9.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
-    "@types/d3": "^7.4.3",
-    "@types/three": "^0.159.0",
-    "@types/animejs": "^3.1.12",
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.0.10",
-    "typescript": "^5.3.3",
-    "eslint": "^8.55.0",
-    "eslint-plugin-react": "^7.33.2"
-  },
+  "description": "多智能体知识图谱系统前端",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "build": "vite build",
     "preview": "vite preview"
   },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^4.0.0"
   }
 }

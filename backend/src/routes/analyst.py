@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from src.utils.config import settings
+from src.config.settings import settings
 
 from src.core.security import get_current_user
 from src.models.user import User

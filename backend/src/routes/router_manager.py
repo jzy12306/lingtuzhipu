@@ -28,15 +28,12 @@ class RouterManager:
         try:
             logger.info("开始注册API路由...")
             
-            # 注册各模块路由到API路由
+            # 注册各模块路由到主路由
             self._register_auth_routes()
             self._register_document_routes()
             self._register_knowledge_routes()
             self._register_health_routes()
             self._register_analyst_routes()
-            
-            # 将API路由注册到主路由
-            self.main_router.include_router(self.api_router)
             
             logger.info("所有API路由注册完成")
             
@@ -47,11 +44,8 @@ class RouterManager:
     def _register_auth_routes(self):
         """注册认证相关路由"""
         try:
-            # 从auth模块导入路由并注册
-            self.api_router.include_router(self.auth_router)
-            
-            # 注册具体的认证端点
-            self.auth_router.include_router(auth.router)
+            # 直接注册auth模块的路由（auth.router已经包含了/api/auth前缀）
+            self.main_router.include_router(auth.router)
             
             logger.info("认证路由注册完成")
             
@@ -62,18 +56,12 @@ class RouterManager:
     def _register_document_routes(self):
         """注册文档相关路由"""
         try:
-            # 应用认证依赖
-            document_router = APIRouter()
-            document_router.include_router(documents.router)
-            
-            # 注册文档路由到API路由
-            self.api_router.include_router(
-                self.documents_router,
+            # 直接注册documents模块的路由（documents.router已经包含了/api/documents前缀）
+            # 并应用认证依赖
+            self.main_router.include_router(
+                documents.router,
                 dependencies=[Depends(get_current_active_user)]
             )
-            
-            # 将文档模块路由注册到文档路由
-            self.documents_router.include_router(document_router)
             
             logger.info("文档路由注册完成")
             
@@ -84,18 +72,12 @@ class RouterManager:
     def _register_knowledge_routes(self):
         """注册知识图谱相关路由"""
         try:
-            # 应用认证依赖
-            knowledge_router = APIRouter()
-            knowledge_router.include_router(knowledge.router)
-            
-            # 注册知识图谱路由到API路由
-            self.api_router.include_router(
-                self.knowledge_router,
+            # 直接注册knowledge模块的路由（knowledge.router已经包含了/api/knowledge前缀）
+            # 并应用认证依赖
+            self.main_router.include_router(
+                knowledge.router,
                 dependencies=[Depends(get_current_active_user)]
             )
-            
-            # 将知识图谱模块路由注册到知识图谱路由
-            self.knowledge_router.include_router(knowledge_router)
             
             logger.info("知识图谱路由注册完成")
             
@@ -106,9 +88,12 @@ class RouterManager:
     def _register_health_routes(self):
         """注册健康检查相关路由"""
         try:
-            # 从health模块导入路由并注册
-            self.api_router.include_router(self.health_router)
-            self.health_router.include_router(health.router)
+            # 注册health模块的路由，添加/api/health前缀
+            self.main_router.include_router(
+                health.router,
+                prefix="/api/health",
+                tags=["health"]
+            )
             
             logger.info("健康检查路由注册完成")
             
@@ -119,18 +104,13 @@ class RouterManager:
     def _register_analyst_routes(self):
         """注册分析师相关路由"""
         try:
-            # 应用认证依赖
-            analyst_router = APIRouter()
-            analyst_router.include_router(analyst.router)
-            
-            # 注册分析师路由到API路由
-            self.api_router.include_router(
-                self.analyst_router,
+            # 注册analyst模块的路由，添加/api/analyst前缀并应用认证依赖
+            self.main_router.include_router(
+                analyst.router,
+                prefix="/api/analyst",
+                tags=["analyst"],
                 dependencies=[Depends(get_current_active_user)]
             )
-            
-            # 将分析师模块路由注册到分析师路由
-            self.analyst_router.include_router(analyst_router)
             
             logger.info("分析师路由注册完成")
             

@@ -13,7 +13,7 @@ from src.utils.file_processing import process_uploaded_file
 from src.services.document_service import DocumentService
 from src.models.user import User
 from src.agents.builder import BuilderAgentService
-from src.utils.config import settings
+from src.config.settings import settings
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 

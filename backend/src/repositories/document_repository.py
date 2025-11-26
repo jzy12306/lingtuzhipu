@@ -210,3 +210,51 @@ class DocumentRepository:
         except Exception as e:
             self.logger.error(f"搜索文档失败: {str(e)}")
             raise
+    
+    async def get_document_statistics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """获取文档统计信息"""
+        try:
+            collection = await self.get_collection()
+            
+            # 构建查询条件
+            filter_criteria = {}
+            if user_id:
+                filter_criteria["user_id"] = user_id
+            
+            # 总文档数
+            total_count = await collection.count_documents(filter_criteria)
+            
+            # 各状态文档数
+            status_counts = {}
+            pipeline = [
+                {"$match": filter_criteria},
+                {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+            ]
+            
+            cursor = collection.aggregate(pipeline)
+            async for doc in cursor:
+                status_counts[doc["_id"]] = doc["count"]
+            
+            # 最近7天上传的文档数
+            from datetime import datetime, timedelta
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+            
+            recent_filter = filter_criteria.copy()
+            recent_filter["created_at"] = {"$gte": seven_days_ago}
+            recent_count = await collection.count_documents(recent_filter)
+            
+            return {
+                "total_documents": total_count,
+                "status_breakdown": status_counts,
+                "recent_uploads": recent_count,
+                "by_industry": {}  # 可选：按行业统计
+            }
+        except Exception as e:
+            self.logger.error(f"获取文档统计信息失败: {str(e)}")
+            # 返回默认统计信息而不是抛出异常
+            return {
+                "total_documents": 0,
+                "status_breakdown": {},
+                "recent_uploads": 0,
+                "by_industry": {}
+            }

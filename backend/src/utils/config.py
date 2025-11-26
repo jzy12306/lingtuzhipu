@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from typing import List
 import os
 
@@ -39,10 +40,17 @@ class Settings(BaseSettings):
     
     # 文件上传设置
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
-    # 默认允许的文件扩展名列表
-    ALLOWED_EXTENSIONS: List[str] = [
-        ".txt", ".md", ".pdf", ".doc", ".docx", ".csv", ".json", ".xml"
-    ]
+    # 从环境变量获取允许的文件扩展名列表，如果没有则使用默认值
+    ALLOWED_EXTENSIONS: List[str] = Field(
+        default_factory=lambda: [
+            ext.strip() if ext.strip().startswith('.') else f".{ext.strip()}" 
+            for ext in os.getenv(
+                "ALLOWED_EXTENSIONS", 
+                ".txt,.md,.pdf,.doc,.docx,.csv,.json,.xml"
+            ).split(",")
+        ],
+        validate_default=False
+    )
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     
     # LLM设置

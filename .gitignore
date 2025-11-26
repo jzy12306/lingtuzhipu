@@ -26,6 +26,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Environment variables
 .env
@@ -33,21 +36,30 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env_*
+.env.*
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Build outputs
 dist/
 build/
 *.tgz
+*.tsbuildinfo
 
 # Logs
 *.log
 logs/
+lerna-debug.log*
 
 # Uploads
 backend/uploads/
@@ -65,3 +77,77 @@ Thumbs.db
 # Local development
 .arts/
 .vite/
+
+# Project specific
+.kiro/
+.lingma/
+.qoder/
+.windsurf/
+
+# Cache and temp files
+.cache/
+.temp/
+.tmp/
+tmp/
+temp/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test
+.yarn-integrity
+
+# Backup files
+*.bak
+*.tmp
+*~
+
+# Frontend build artifacts
+frontend/dist/
+frontend/build/
+frontend/*.html
+
+# Backend specific
+backend/.env.example
+backend/*.pyc
+backend/__pycache__/
+
+# Testing
+__tests__/
+*.test.js
+*.spec.js
+.coverage
+coverage/
+.pytest_cache/
+.tox/
+.nox/
+.coverage.*
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+
+# Trae AI files
+.trae/
+

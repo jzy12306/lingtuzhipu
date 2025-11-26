@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系统管理 - 智能体监控与配置</title>
+    <title>系统管理 - 灵图智谱</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -13,6 +13,20 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
             min-height: 100vh;
+        }
+        .hero-title {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .floating-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
         }
         .dashboard-card {
             background: rgba(15, 23, 42, 0.8);
@@ -55,6 +69,16 @@
         .log-warning { border-color: #f59e0b; }
         .log-error { border-color: #ef4444; }
         .log-success { border-color: #10b981; }
+        
+        #particles-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="text-white overflow-x-hidden">
@@ -81,12 +105,21 @@
         </div>
     </nav>
 
-    <!-- 主要内容区域 -->
-    <main class="pt-20 pb-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            
+    <!-- 粒子背景容器 -->
+    <div id="particles-container"></div>
 
-            <!-- 页面标题 -->
+    <!-- Hero 区域 -->
+    <section class="pt-24 pb-16 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16 floating-animation">
+                <h1 class="text-5xl md:text-6xl font-bold hero-title mb-6">系统管理控制台</h1>
+                <p class="text-xl text-slate-400 max-w-3xl mx-auto">智能体性能监控、系统配置管理和运行状态实时查看</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 主要内容区域 -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="mb-8">
                 <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
                     系统管理控制台
@@ -379,7 +412,7 @@
                 </div>
             </div>
         </div>
-    </main>
+    </div>
 
     <!-- 页脚 -->
     <footer class="py-12 border-t border-slate-700/50">

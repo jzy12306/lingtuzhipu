@@ -5,20 +5,31 @@ from passlib.context import CryptContext
 import secrets
 
 
-# 密码上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# 密码上下文 - 同时支持bcrypt与pbkdf2_sha256，兼容历史数据
+try:
+    pwd_context = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
+    # 测试bcrypt是否正常工作
+    pwd_context.hash("test")
+except Exception as e:
+    # 如果初始化异常，降级使用pbkdf2_sha256
+    print(f"密码哈希初始化异常，降级使用pbkdf2_sha256: {str(e)}")
+    pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 # 获取密码哈希
 def get_password_hash(password: str) -> str:
-    """生成密码的哈希值"""
+    """生成密码的哈希值，使用pbkdf2_sha256算法"""
+    # pbkdf2_sha256没有72字节的限制，不需要截断
     return pwd_context.hash(password)
 
 
 # 验证密码
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码是否正确"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 # 生成访问令牌
@@ -76,10 +87,11 @@ def generate_api_key(length: int = 40) -> str:
     return secrets.token_urlsafe(length)
 
 
-# 安全配置
-SECRET_KEY = "your-secret-key-here"  # 在生产环境中应该从环境变量中获取
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# 安全配置（统一读取全局设置）
+from src.config.settings import settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 # 获取当前用户（FastAPI依赖项）

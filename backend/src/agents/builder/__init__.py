@@ -4,7 +4,7 @@ from typing import Optional
 from src.agents.builder.builder_agent import BuilderAgent
 from src.agents.builder.llm_builder_agent import LLMBuilderAgent
 from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

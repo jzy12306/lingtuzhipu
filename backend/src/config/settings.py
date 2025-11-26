@@ -47,7 +47,8 @@ class Settings(BaseSettings):
     
     @property
     def allowed_extensions_list(self) -> List[str]:
-        return [ext.strip() for ext in self.ALLOWED_EXTENSIONS.split(",")]
+        return [f".{ext.strip()}" if not ext.strip().startswith(".") else ext.strip() 
+                for ext in self.ALLOWED_EXTENSIONS.split(",")]
     
     class Config:
         env_file = ".env"

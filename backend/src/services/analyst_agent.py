@@ -70,7 +70,7 @@ class AnalystAgent:
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个智能知识图谱分析助手。基于提供的上下文信息，回答用户的查询。"
+                        "content": "你是一个灵图智谱分析助手。基于提供的上下文信息，回答用户的查询。"
                     },
                     {
                         "role": "user",
@@ -130,7 +130,7 @@ class AnalystAgent:
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个智能知识图谱分析助手。"
+                        "content": "你是一个灵图智谱分析助手。"
                     },
                     {
                         "role": "user",

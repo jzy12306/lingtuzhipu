@@ -4,10 +4,7 @@ from typing import Dict, Any
 import asyncio
 import time
 
-from src.services.db_service import db_service
-from src.services.knowledge_graph_service import knowledge_graph_service
-from src.services.document_service import document_service
-from src.services.llm_service import llm_service
+from src.services.service_factory import ServiceFactory
 from src.core.security import get_current_user_optional
 from src.models.user import User
 
@@ -21,12 +18,15 @@ async def health_check(
     """综合健康检查端点，检查所有核心服务状态"""
     start_time = time.time()
     
+    # 获取服务工厂实例
+    service_factory = ServiceFactory()
+    
     # 并行执行所有检查
     checks = await asyncio.gather(
-        check_database(),
-        check_knowledge_graph(),
-        check_document_service(),
-        check_llm_service(),
+        check_database(service_factory),
+        check_knowledge_graph(service_factory),
+        check_document_service(service_factory),
+        check_llm_service(service_factory),
         return_exceptions=True
     )
     
@@ -62,51 +62,106 @@ async def health_check(
     return JSONResponse(content=response, status_code=status_code)
 
 
-async def check_database() -> Dict[str, Any]:
+async def check_database(service_factory: ServiceFactory) -> Dict[str, Any]:
     """检查数据库连接状态"""
     try:
-        result = await db_service.health_check()
+        db_service = service_factory.db_service
+        result = await db_service.get_stats()
         return {
-            "status": "healthy",
+            "status": "healthy" if result.get("healthy", False) else "unhealthy",
             "details": result
         }
     except Exception as e:
         raise Exception(f"数据库检查失败: {str(e)}")
 
 
-async def check_knowledge_graph() -> Dict[str, Any]:
+async def check_knowledge_graph(service_factory: ServiceFactory) -> Dict[str, Any]:
     """检查知识图谱服务状态"""
     try:
-        stats = await knowledge_graph_service.get_stats()
+        kg_service = service_factory.knowledge_graph_service
+        # 检查服务是否已初始化
+        if kg_service is None or not getattr(kg_service, 'is_initialized', False):
+            return {
+                "status": "unhealthy",
+                "error": "知识图谱服务未初始化"
+            }
+            
+        # 获取统计信息
+        stats = await kg_service.get_stats() if hasattr(kg_service, 'get_stats') else {}
         return {
             "status": "healthy",
             "stats": stats,
-            "is_initialized": knowledge_graph_service.is_initialized
+            "is_initialized": getattr(kg_service, 'is_initialized', False)
         }
     except Exception as e:
-        raise Exception(f"知识图谱服务检查失败: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "error": f"知识图谱服务检查失败: {str(e)}"
+        }
 
 
-async def check_document_service() -> Dict[str, Any]:
+async def check_document_service(service_factory: ServiceFactory) -> Dict[str, Any]:
     """检查文档服务状态"""
     try:
-        stats = await document_service.get_stats()
-        return {
-            "status": "healthy",
-            "stats": stats
-        }
+        doc_service = service_factory.document_service
+        # 检查文档服务是否已初始化
+        if doc_service is None or not getattr(doc_service, 'initialized', False):
+            return {
+                "status": "unhealthy",
+                "error": "文档服务未初始化"
+            }
+        
+        # 尝试获取文档统计信息
+        try:
+            stats = await doc_service.get_document_statistics() if hasattr(doc_service, 'get_document_statistics') else {}
+            return {
+                "status": "healthy",
+                "stats": stats
+            }
+        except Exception as stats_error:
+            # 如果获取统计信息失败，但仍处于初始化状态，则标记为降级
+            return {
+                "status": "degraded",
+                "initialized": True,
+                "error": f"获取统计信息失败: {str(stats_error)}"
+            }
     except Exception as e:
-        raise Exception(f"文档服务检查失败: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "error": f"文档服务检查失败: {str(e)}"
+        }
 
 
-async def check_llm_service() -> Dict[str, Any]:
+async def check_llm_service(service_factory: ServiceFactory) -> Dict[str, Any]:
     """检查LLM服务状态"""
     try:
-        model_info = await llm_service.get_model_info()
+        llm_service = service_factory.llm_service
+        # 检查LLM服务是否已初始化
+        if llm_service is None or not getattr(llm_service, 'initialized', False):
+            return {
+                "status": "unhealthy",
+                "error": "LLM服务未初始化"
+            }
+        
+        # 检查本地LLM配置
+        service_info = {
+            "local_llm_enabled": getattr(llm_service, 'local_llm_enabled', False),
+            "local_llm_url": getattr(llm_service, 'local_llm_url', None),
+            "local_llm_model": getattr(llm_service, 'local_llm_model', None)
+        }
+        
+        # 如果启用了本地LLM，检查配置是否完整
+        if getattr(llm_service, 'local_llm_enabled', False):
+            if not getattr(llm_service, 'local_llm_url', None) or not getattr(llm_service, 'local_llm_model', None):
+                return {
+                    "status": "degraded",
+                    "info": service_info,
+                    "error": "本地LLM配置不完整"
+                }
+        
         return {
             "status": "healthy",
-            "model_info": model_info,
-            "is_connected": llm_service.is_connected
+            "info": service_info
         }
     except Exception as e:
         # LLM服务可能不可用，但不应影响整体系统状态
@@ -130,14 +185,20 @@ def handle_check_result(result: Any, service_name: str) -> Dict[str, Any]:
 async def get_system_metrics() -> Dict[str, Any]:
     """获取系统性能指标"""
     try:
+        # 获取服务工厂实例
+        service_factory = ServiceFactory()
+        
         # 获取数据库指标
-        db_metrics = await db_service.get_metrics() if hasattr(db_service, 'get_metrics') else {}
+        db_service = service_factory.db_service
+        db_metrics = await db_service.get_stats() if hasattr(db_service, 'get_stats') else {}
         
         # 获取知识图谱指标
-        kg_metrics = await knowledge_graph_service.get_metrics() if hasattr(knowledge_graph_service, 'get_metrics') else {}
+        kg_service = service_factory.knowledge_graph_service
+        kg_metrics = await kg_service.get_metrics() if hasattr(kg_service, 'get_metrics') else {}
         
         # 获取文档服务指标
-        doc_metrics = await document_service.get_metrics() if hasattr(document_service, 'get_metrics') else {}
+        doc_service = service_factory.document_service
+        doc_metrics = await doc_service.get_document_statistics() if hasattr(doc_service, 'get_document_statistics') else {}
         
         return {
             "status": "success",

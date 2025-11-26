@@ -1,16 +1,61 @@
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from passlib.context import CryptContext
 from bson import ObjectId
 from src.services.db_service import db_service
 from src.models.user import User
-
-# 密码加密上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from src.core.security import get_password_hash, verify_password
 
 logger = logging.getLogger(__name__)
 
+# 全局内存集合存储（在MongoDB不可用时降级使用，跨仓库实例共享）
+_GLOBAL_MEMORY_COLLECTIONS = {}
+
+
+class MemoryInsertOneResult:
+    def __init__(self, inserted_id):
+        self.inserted_id = inserted_id
+
+class MemoryUpdateResult:
+    def __init__(self, modified_count):
+        self.modified_count = modified_count
+
+class MemoryCollection:
+    def __init__(self):
+        self.docs = []
+        self._id_counter = 1
+    async def insert_one(self, doc):
+        _id = str(self._id_counter)
+        self._id_counter += 1
+        d = dict(doc)
+        d["_id"] = _id
+        self.docs.append(d)
+        return MemoryInsertOneResult(_id)
+    async def find_one(self, filter_dict):
+        for d in self.docs:
+            match = True
+            for k, v in filter_dict.items():
+                if d.get(k) != v:
+                    match = False
+                    break
+            if match:
+                return dict(d)
+        return None
+    async def update_one(self, filter_dict, update_dict):
+        modified = 0
+        for d in self.docs:
+            match = True
+            for k, v in filter_dict.items():
+                if d.get(k) != v:
+                    match = False
+                    break
+            if match:
+                if "$set" in update_dict:
+                    for k, v in update_dict["$set"].items():
+                        d[k] = v
+                modified += 1
+                break
+        return MemoryUpdateResult(modified)
 
 class UserRepository:
     """用户仓库"""
@@ -19,22 +64,36 @@ class UserRepository:
         self.collection_name = "users"
         self.logger = logger.getChild("UserRepository")
         self.mongo_client = db_service.mongo_client
-        self.db = self.mongo_client.get_database() if self.mongo_client else None
+        # 从环境变量获取数据库名称
+        import os
+        db_name = os.getenv("MONGO_DB_NAME", "knowledge_graph")
+        self.db = self.mongo_client[db_name] if self.mongo_client is not None else None
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """验证密码"""
-        return pwd_context.verify(plain_password, hashed_password)
+        return verify_password(plain_password, hashed_password)
     
     def get_password_hash(self, password: str) -> str:
         """获取密码哈希值"""
-        return pwd_context.hash(password)
+        return get_password_hash(password)
     
     async def get_collection(self):
-        """获取MongoDB集合"""
-        if self.db:
+        """获取MongoDB集合，数据库不可用时使用内存集合作为降级。"""
+        if self.db is not None:
             return self.db[self.collection_name]
-        mongodb = await db_service.get_mongodb()
-        return mongodb[self.collection_name]
+        try:
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                return mongodb[self.collection_name]
+        except Exception as e:
+            self.logger.warning(f"获取MongoDB集合失败，启用内存集合: {str(e)}")
+        # 内存集合降级（全局共享）
+        global _GLOBAL_MEMORY_COLLECTIONS
+        if '_GLOBAL_MEMORY_COLLECTIONS' not in globals():
+            _GLOBAL_MEMORY_COLLECTIONS = {}
+        if self.collection_name not in _GLOBAL_MEMORY_COLLECTIONS:
+            _GLOBAL_MEMORY_COLLECTIONS[self.collection_name] = MemoryCollection()
+        return _GLOBAL_MEMORY_COLLECTIONS[self.collection_name]
     
     async def create(self, user_data: Dict[str, Any]) -> User:
         """创建用户"""
@@ -106,9 +165,23 @@ class UserRepository:
                     pass
             
             if user_data:
-                # 移除MongoDB的_id字段
+                # 转换MongoDB的_id为id
                 if "_id" in user_data:
+                    user_data["id"] = str(user_data["_id"])
                     del user_data["_id"]
+                # 添加默认字段如果没有
+                if "created_at" not in user_data:
+                    user_data["created_at"] = datetime.utcnow()
+                if "updated_at" not in user_data:
+                    user_data["updated_at"] = datetime.utcnow()
+                if "is_active" not in user_data:
+                    user_data["is_active"] = True
+                if "is_admin" not in user_data:
+                    user_data["is_admin"] = False
+                if "is_superuser" not in user_data:
+                    user_data["is_superuser"] = False
+                if "email_verified" not in user_data:
+                    user_data["email_verified"] = False
                 return User(**user_data)
             return None
         except Exception as e:
@@ -122,9 +195,23 @@ class UserRepository:
             user_data = await collection.find_one({"email": email})
             
             if user_data:
-                # 移除MongoDB的_id字段
+                # 转换MongoDB的_id为id
                 if "_id" in user_data:
+                    user_data["id"] = str(user_data["_id"])
                     del user_data["_id"]
+                # 添加默认字段如果没有
+                if "created_at" not in user_data:
+                    user_data["created_at"] = datetime.utcnow()
+                if "updated_at" not in user_data:
+                    user_data["updated_at"] = datetime.utcnow()
+                if "is_active" not in user_data:
+                    user_data["is_active"] = True
+                if "is_admin" not in user_data:
+                    user_data["is_admin"] = False
+                if "is_superuser" not in user_data:
+                    user_data["is_superuser"] = False
+                if "email_verified" not in user_data:
+                    user_data["email_verified"] = False
                 return User(**user_data)
             return None
         except Exception as e:
@@ -138,9 +225,23 @@ class UserRepository:
             user_data = await collection.find_one({"username": username})
             
             if user_data:
-                # 移除MongoDB的_id字段
+                # 转换MongoDB的_id为id
                 if "_id" in user_data:
+                    user_data["id"] = str(user_data["_id"])
                     del user_data["_id"]
+                # 添加默认字段如果没有
+                if "created_at" not in user_data:
+                    user_data["created_at"] = datetime.utcnow()
+                if "updated_at" not in user_data:
+                    user_data["updated_at"] = datetime.utcnow()
+                if "is_active" not in user_data:
+                    user_data["is_active"] = True
+                if "is_admin" not in user_data:
+                    user_data["is_admin"] = False
+                if "is_superuser" not in user_data:
+                    user_data["is_superuser"] = False
+                if "email_verified" not in user_data:
+                    user_data["email_verified"] = False
                 return User(**user_data)
             return None
         except Exception as e:

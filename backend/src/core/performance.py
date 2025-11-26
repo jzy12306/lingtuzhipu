@@ -53,20 +53,20 @@ class RateLimitConfig:
     
     def get_config_for_route(self, route: str) -> Dict[str, Any]:
         """获取特定路由的限流配置"""
-        if route in self.special_routes:
-            return {
-                "enabled": self.enabled,
-                **self.special_routes[route]
-            }
-        
         # 默认配置
-        return {
+        default_config = {
             "enabled": self.enabled,
             "per_minute": self.per_minute,
             "per_hour": self.per_hour,
             "burst": self.burst,
             "block_duration": self.block_duration
         }
+        
+        # 如果是特殊路由，合并特殊配置（特殊配置会覆盖默认值）
+        if route in self.special_routes:
+            default_config.update(self.special_routes[route])
+        
+        return default_config
 
 
 class CacheConfig:

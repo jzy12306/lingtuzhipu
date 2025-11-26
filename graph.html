@@ -58,6 +58,16 @@
         .node-type-event { background: rgba(16, 185, 129, 0.2); color: #34d399; }
         .node-type-concept { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
         .node-type-document { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        
+        #particles-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="text-white overflow-x-hidden">
@@ -82,6 +92,9 @@
             </div>
         </div>
     </nav>
+
+    <!-- 粒子背景容器 -->
+    <div id="particles-container"></div>
 
     <!-- 主要内容区域 -->
     <main class="pt-20 pb-8">

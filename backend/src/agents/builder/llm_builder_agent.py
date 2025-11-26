@@ -11,7 +11,7 @@ from src.agents.builder.builder_agent import BuilderAgent
 from src.models.knowledge import Entity, Relation
 from src.models.document import Document
 from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,12 @@ class LLMBuilderAgent(BuilderAgent):
             logger.info(f"开始处理文档: {document.title} (ID: {document.id})")
             
             # 更新文档状态为处理中
-            await self.knowledge_repository.update_document_status(
-                document_id=document.id,
-                status="processing"
-            )
+            # 注意：这里需要实现文档状态更新逻辑
+            # 由于KnowledgeRepository缺少update_document_status方法，暂时注释
+            # await self.knowledge_repository.update_document_status(
+            #     document_id=document.id,
+            #     status="processing"
+            # )
             
             # 步骤1: 提取实体
             entities = await self.extract_entities(
@@ -102,14 +104,15 @@ class LLMBuilderAgent(BuilderAgent):
         except Exception as e:
             logger.error(f"处理文档失败: {document.title}, 错误: {str(e)}")
             # 更新文档状态为处理失败
-            await self.knowledge_repository.update_document_status(
-                document_id=document.id,
-                status="processing_failed",
-                processing_details={
-                    "error": str(e),
-                    "processed_at": datetime.utcnow().isoformat()
-                }
-            )
+            # 注意：这里需要实现文档状态更新逻辑
+            # await self.knowledge_repository.update_document_status(
+            #     document_id=document.id,
+            #     status="processing_failed",
+            #     processing_details={
+            #         "error": str(e),
+            #         "processed_at": datetime.utcnow().isoformat()
+            #     }
+            # )
             raise
     
     async def extract_entities(self, content: str, document_id: str, user_id: str) -> List[Entity]:

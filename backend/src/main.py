@@ -5,6 +5,10 @@ import logging
 import os
 import uvicorn
 import sys
+from dotenv import load_dotenv
+
+# 加载.env文件
+load_dotenv()
 
 # 使用服务工厂和路由管理器
 from src.services.service_factory import ServiceFactory, UserCreate
@@ -47,18 +51,35 @@ async def lifespan(app: FastAPI):
         admin_password = os.getenv("ADMIN_PASSWORD", "admin123456")
         
         # 检查管理员用户是否存在
-        existing_admin = await service_factory.user_repository.find_by_username(admin_username)
+        try:
+            existing_admin = await service_factory.user_repository.find_by_username(admin_username)
+        except Exception as e:
+            logger.error(f"查询管理员用户失败: {str(e)}")
+            existing_admin = None
+        
         if not existing_admin:
-            admin_data = UserCreate(
-                username=admin_username,
-                email=admin_email,
-                password=get_password_hash(admin_password)
-            )
-            await service_factory.user_repository.create_user(
-                admin_data.dict(),
-                is_admin=True
-            )
-            logger.info(f"默认管理员用户 {admin_username} 创建成功")
+            try:
+                # 使用security模块中的get_password_hash函数
+                # 现在它使用pbkdf2_sha256算法，没有72字节的限制
+                hashed_password = get_password_hash(admin_password)
+                
+                # 为管理员生成哈希密码并以hashed_password字段保存
+                hashed_password = get_password_hash(admin_password)
+                admin_dict = {
+                    "username": admin_username,
+                    "email": admin_email,
+                    "hashed_password": hashed_password,
+                    "is_active": True,
+                    "is_admin": True,
+                    "email_verified": True,
+                }
+                await service_factory.user_repository.create(admin_dict)
+                logger.info(f"默认管理员用户 {admin_username} 创建成功")
+            except Exception as e:
+                logger.error(f"创建管理员用户失败: {str(e)}")
+                # 打印详细的异常信息，帮助调试
+                logger.error(f"异常类型: {type(e).__name__}")
+                logger.error(f"异常详情: {repr(e)}")
         else:
             logger.info(f"管理员用户 {admin_username} 已存在")
     except Exception as e:
@@ -79,8 +100,8 @@ async def lifespan(app: FastAPI):
 
 # 创建FastAPI应用实例
 app = FastAPI(
-    title="智能知识图谱系统 API",
-    description="基于大型语言模型的智能知识图谱构建和查询系统",
+    title="灵图智谱 API",
+    description="基于大型语言模型的灵图智谱构建和查询系统",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -114,7 +135,7 @@ async def global_exception_handler(request, exc):
 async def root():
     """根路径"""
     return {
-        "message": "欢迎使用知识图谱构建与查询系统",
+        "message": "欢迎使用灵图智谱",
         "version": "1.0.0",
         "docs": "/docs",
         "redoc": "/redoc"
@@ -125,10 +146,10 @@ async def root():
 async def health_check():
     """健康检查端点"""
     # 使用服务工厂获取数据库服务进行健康检查
-    db_status = await service_factory.db_service.health_check()
+    db_status = await service_factory.db_service.get_stats()
     
     return {
-        "status": "healthy" if db_status["status"] == "healthy" else "unhealthy",
+        "status": "healthy" if db_status.get("healthy") else "unhealthy",
         "database": db_status
     }
 

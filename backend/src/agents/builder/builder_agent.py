@@ -6,7 +6,7 @@ from datetime import datetime
 from src.models.knowledge import Entity, Relation
 from src.models.document import Document
 from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.config import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

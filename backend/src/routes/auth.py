@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import secrets
 import string
+import os
 from typing import Optional
 
 from src.models.user import User, UserCreate, UserUpdate, UserResponse, Token, TokenData, UserLogin, VerificationCode
@@ -13,14 +14,15 @@ from src.services.email_service import email_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# 配置
-SECRET_KEY = "your-secret-key-here-change-in-production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# 配置（统一从全局设置读取）
+from src.config.settings import settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # 密码上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from src.core.security import verify_password, get_password_hash
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -28,19 +30,18 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 # 存储验证码的内存缓存（实际项目中应使用Redis等）
 verification_codes = {}
 
+# 开发模式下跳过验证码验证的配置
+SKIP_VERIFICATION_CODE = os.getenv("SKIP_VERIFICATION_CODE", "False").lower() == "true"
+
 
 def get_user_repository() -> UserRepository:
     return UserRepository()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+# 使用统一安全模块的verify_password
 
 
-def get_password_hash(password: str) -> str:
-    """获取密码哈希值"""
-    return pwd_context.hash(password)
+# 使用统一安全模块的get_password_hash
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -145,26 +146,28 @@ async def register(
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     """用户注册"""
-    # 验证验证码
-    email_verification = verification_codes.get(user_data.email)
-    if not email_verification:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="请先获取验证码"
-        )
-    
-    if datetime.utcnow() > email_verification["expires_at"]:
-        del verification_codes[user_data.email]
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="验证码已过期，请重新获取"
-        )
-    
-    if email_verification["code"] != verification_code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="验证码错误"
-        )
+    # 开发模式下跳过验证码验证
+    if not SKIP_VERIFICATION_CODE:
+        # 验证验证码
+        email_verification = verification_codes.get(user_data.email)
+        if not email_verification:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请先获取验证码"
+            )
+        
+        if datetime.utcnow() > email_verification["expires_at"]:
+            del verification_codes[user_data.email]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="验证码已过期，请重新获取"
+            )
+        
+        if email_verification["code"] != verification_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="验证码错误"
+            )
     
     # 检查用户名是否已存在
     existing_user = await user_repo.find_by_username(user_data.username)
@@ -247,7 +250,8 @@ async def login(
         "access_token": access_token,
         "token_type": "bearer",
         "refresh_token": refresh_token,
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": UserResponse(**user.dict())
     }
 
 
