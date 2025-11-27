@@ -63,11 +63,7 @@ class UserRepository:
     def __init__(self):
         self.collection_name = "users"
         self.logger = logger.getChild("UserRepository")
-        self.mongo_client = db_service.mongo_client
-        # 从环境变量获取数据库名称
-        import os
-        db_name = os.getenv("MONGO_DB_NAME", "knowledge_graph")
-        self.db = self.mongo_client[db_name] if self.mongo_client is not None else None
+        self.db = None
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """验证密码"""

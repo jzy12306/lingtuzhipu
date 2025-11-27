@@ -6,6 +6,7 @@ from src.models.document import Document, DocumentCreate, DocumentUpdate, Docume
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.agents.builder import BuilderAgentService
+from src.services.ocr_service import ocr_service
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,9 @@ class DocumentService:
                 logger.error(f"文档内容不存在: {document_id}")
                 await self.update_document_status(document_id, "error")
                 return
+            
+            # 更新文档状态为OCR识别中
+            await self.update_document_status(document_id, "ocr_processing")
             
             # 使用构建者智能体处理文档
             builder_service = BuilderAgentService.get_instance(self.knowledge_repository)

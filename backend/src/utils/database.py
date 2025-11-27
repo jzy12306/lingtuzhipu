@@ -22,15 +22,15 @@ async def init_mongodb():
     global _mongodb_client, _mongodb_db
     
     try:
-        logger.info(f"正在连接MongoDB: {settings.MONGODB_URI}")
+        logger.info(f"正在连接MongoDB: {settings.MONGO_URI}")
         _mongodb_client = motor.motor_asyncio.AsyncIOMotorClient(
-            settings.MONGODB_URI,
+            settings.MONGO_URI,
             serverSelectionTimeoutMS=5000
         )
         
         # 验证连接
         await _mongodb_client.admin.command('ping')
-        _mongodb_db = _mongodb_client[settings.MONGODB_DB_NAME]
+        _mongodb_db = _mongodb_client[settings.MONGO_DB_NAME]
         
         # 创建必要的集合和索引
         await _create_mongodb_indices()

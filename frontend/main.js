@@ -522,15 +522,31 @@ function generateProcessingResult(fileData) {
         { from: '犯罪', to: '过失犯罪', type: '包含', confidence: 0.87 }
     ];
     
+    // 模拟OCR识别结果
+    const mockOCRResult = {
+        text: `中华人民共和国刑法是规定犯罪和刑罚的法律，是国家的基本法律之一。
+刑法分为总则和分则两部分，总则规定了犯罪的一般原理和刑罚的一般原则，
+分则规定了各种具体犯罪的构成要件和法定刑。
+故意犯罪是指明知自己的行为会发生危害社会的结果，并且希望或者放任这种结果发生的犯罪。
+过失犯罪是指应当预见自己的行为可能发生危害社会的结果，因为疏忽大意而没有预见，
+或者已经预见而轻信能够避免，以致发生这种结果的犯罪。`,
+        confidence: 0.94,
+        pages: 1,
+        characters: 325,
+        lines: 8
+    };
+    
     return {
         fileName: fileData.name,
         fileSize: fileData.size,
         processingTime: Math.floor(Math.random() * 30) + 10, // 10-40秒
         entities: mockEntities,
         relationships: mockRelationships,
+        ocrResult: mockOCRResult,
         summary: `成功从《${fileData.name}》中提取了${mockEntities.length}个实体和${mockRelationships.length}个关系，
                   构建了基础的法律知识图谱结构。处理时间：${Math.floor(Math.random() * 30) + 10}秒。`,
         processingSteps: [
+            { step: 'OCR识别', status: '完成', duration: '5.3s' },
             { step: '文本预处理', status: '完成', duration: '2.1s' },
             { step: '实体识别', status: '完成', duration: '8.5s' },
             { step: '关系抽取', status: '完成', duration: '5.2s' },
@@ -592,6 +608,33 @@ function viewProcessingResult(fileId) {
                 <h3 class="text-lg font-semibold text-cyan-400 mb-3">处理摘要</h3>
                 <div class="bg-slate-700/30 rounded-lg p-4">
                     <p class="text-slate-300 leading-relaxed">${result.summary}</p>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-cyan-400 mb-3">OCR识别结果</h3>
+                <div class="bg-slate-700/30 rounded-lg p-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div class="bg-slate-700/50 rounded-lg p-3">
+                            <p class="text-sm text-slate-400">识别置信度</p>
+                            <p class="font-medium">${(result.ocrResult.confidence * 100).toFixed(1)}%</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-3">
+                            <p class="text-sm text-slate-400">页数</p>
+                            <p class="font-medium">${result.ocrResult.pages}页</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-3">
+                            <p class="text-sm text-slate-400">字符数</p>
+                            <p class="font-medium">${result.ocrResult.characters}个</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-3">
+                            <p class="text-sm text-slate-400">行数</p>
+                            <p class="font-medium">${result.ocrResult.lines}行</p>
+                        </div>
+                    </div>
+                    <div class="bg-slate-800/50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                        <pre class="text-slate-300 text-sm whitespace-pre-wrap">${result.ocrResult.text}</pre>
+                    </div>
                 </div>
             </div>
             

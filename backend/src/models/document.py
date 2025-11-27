@@ -18,6 +18,7 @@ class DocumentStatus(str, Enum):
     """文档状态枚举"""
     UPLOADED = "uploaded"  # 已上传
     PROCESSING = "processing"  # 处理中
+    OCR_PROCESSING = "ocr_processing"  # OCR识别中
     PROCESSED = "processed"  # 已处理
     FAILED = "failed"  # 处理失败
 
@@ -73,6 +74,10 @@ class Document(DocumentResponse):
     content: Optional[str] = None  # 文档内容
     processing_error: Optional[str] = None  # 处理错误
     embedding_id: Optional[str] = None  # 嵌入ID
+    ocr_status: Optional[str] = Field(None, description="OCR识别状态")
+    ocr_result: Optional[str] = Field(None, description="OCR识别结果")
+    ocr_confidence: Optional[float] = Field(None, description="OCR识别置信度")
+    ocr_error: Optional[str] = Field(None, description="OCR识别错误信息")
     
     class Config:
         from_attributes = True

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-3.5-turbo"
     
+    # LLM配置 - Kimi
+    API_KEY: str = ""
+    API_BASE: str = "https://api.moonshot.cn/v1"
+    MODEL: str = "moonshot-v1-32k"
+    
     # 向量数据库配置
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: int = 19530

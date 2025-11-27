@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     
     # 数据库设置
     # MongoDB
-    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "knowledge_graph")
+    MONGO_URI: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+    MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "knowledge_graph")
     
     # Neo4j
     NEO4J_URI: str = os.getenv("NEO4J_URI", "neo4j://localhost:7687")
@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     USE_LOCAL_LLM: bool = os.getenv("USE_LOCAL_LLM", "False").lower() == "true"
     LOCAL_LLM_URL: str = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1")
+    
+    # Kimi设置
+    API_KEY: str = os.getenv("API_KEY", "")
+    API_BASE: str = os.getenv("API_BASE", "https://api.moonshot.cn/v1")
+    LLM_MODEL: str = os.getenv("MODEL", "moonshot-v1-32k")
     
     # 知识图谱设置
     EMBEDDING_DIMENSION: int = 768

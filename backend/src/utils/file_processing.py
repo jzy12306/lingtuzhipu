@@ -1,9 +1,12 @@
 import io
 import re
+import tempfile
+import os
 from typing import Optional
 from PyPDF2 import PdfReader
 import pandas as pd
 import docx
+from src.services.ocr_service import ocr_service
 
 
 def clean_text(text: str) -> str:
@@ -216,6 +219,49 @@ async def process_docx(file_stream: io.BytesIO) -> str:
         raise Exception(f"处理Word文档失败: {str(e)}")
 
 
+async def process_image(file_stream: io.BytesIO, content_type: str) -> str:
+    """
+    处理图片文件，使用OCR识别文本内容
+    
+    Args:
+        file_stream: 图片文件流
+        content_type: 图片内容类型
+        
+    Returns:
+        OCR识别的文本内容
+    """
+    try:
+        # 创建临时文件保存图片
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.' + content_type.split('/')[-1]) as temp_file:
+            temp_file.write(file_stream.read())
+            temp_file_path = temp_file.name
+        
+        try:
+            # 调用OCR服务识别图片
+            ocr_result = await ocr_service.recognize_image(temp_file_path)
+            
+            # 解析OCR结果
+            if ocr_result.get('errorCode') == '0':
+                # 提取文本内容
+                text_content = []
+                regions = ocr_result.get('regions', [])
+                for region in regions:
+                    lines = region.get('lines', [])
+                    for line in lines:
+                        words = line.get('words', [])
+                        for word in words:
+                            text_content.append(word.get('text', ''))
+                return clean_text(' '.join(text_content))
+            else:
+                raise Exception(f"OCR识别失败: {ocr_result.get('errorMsg', '未知错误')}")
+        finally:
+            # 删除临时文件
+            os.unlink(temp_file_path)
+            
+    except Exception as e:
+        raise Exception(f"处理图片文件失败: {str(e)}")
+
+
 async def process_uploaded_file(file_stream: io.BytesIO, content_type: str) -> str:
     """
     根据文件类型处理上传的文件，提取文本内容
@@ -241,6 +287,9 @@ async def process_uploaded_file(file_stream: io.BytesIO, content_type: str) -> s
         return await process_excel(file_stream)
     elif content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
         return await process_docx(file_stream)
+    elif content_type in ['image/jpeg', 'image/png', 'image/jpg']:
+        # 图片文件，使用OCR识别
+        return await process_image(file_stream, content_type)
     else:
         raise Exception(f"不支持的文件类型: {content_type}")
 

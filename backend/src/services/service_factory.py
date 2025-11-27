@@ -7,6 +7,7 @@ from src.services.llm_service import LLMService
 from src.services.document_service import DocumentService
 from src.services.knowledge_graph_service import KnowledgeGraphService
 from src.services.analyst_agent import AnalystAgent
+from src.services.ocr_service import OCRService
 from src.repositories.user_repository import UserRepository
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
@@ -39,6 +40,7 @@ class ServiceFactory:
             self._document_service: Optional[DocumentService] = None
             self._knowledge_graph_service: Optional[KnowledgeGraphService] = None
             self._analyst_agent: Optional[AnalystAgent] = None
+            self._ocr_service: Optional[OCRService] = None
             self._user_repository: Optional[UserRepository] = None
             self._document_repository: Optional[DocumentRepository] = None
             self._knowledge_repository: Optional[KnowledgeRepository] = None
@@ -209,6 +211,7 @@ llm_service = service_factory.llm_service
 document_service = service_factory.document_service
 knowledge_graph_service = service_factory.knowledge_graph_service
 analyst_agent = service_factory.analyst_agent
+ocr_service = service_factory.ocr_service
 user_repository = service_factory.user_repository
 document_repository = service_factory.document_repository
 query_history_repository = service_factory.query_history_repository

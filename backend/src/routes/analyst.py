@@ -246,6 +246,32 @@ async def health_check(
         )
 
 
+@router.post("/test-query")
+async def test_query(
+    request: QueryRequest
+):
+    """
+    测试查询端点（无需认证）
+    用于测试分析师智能体的查询功能
+    """
+    try:
+        # 直接使用analyst_agent实例处理查询
+        result = await analyst_agent.process_query(
+            query=request.query,
+            user_context={"user_id": "test_user"}
+        )
+        
+        return {
+            "success": True,
+            "result": result
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 # 批量操作端点
 @router.post("/batch/query", response_model=List[Dict[str, Any]])
 async def batch_analyze_queries(

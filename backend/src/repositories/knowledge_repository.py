@@ -23,9 +23,6 @@ class KnowledgeRepository:
     def __init__(self, mongo_client: MongoClient = None, neo4j_driver = None):
         self.mongo_client = mongo_client
         self.neo4j_driver = neo4j_driver
-        if mongo_client:
-            self.entities_collection = mongo_client.kimi.entities
-            self.relations_collection = mongo_client.kimi.relations
         self.logger = logger.getChild("KnowledgeRepository")
     
     async def search_entities(self, query: str) -> List[Dict[str, Any]]:
@@ -533,8 +530,9 @@ class KnowledgeRepository:
         """获取知识图谱统计信息"""
         try:
             # 使用db_service访问数据库
-            entities_collection = db_service.mongo_client.kimi.entities
-            relations_collection = db_service.mongo_client.kimi.relations
+            mongodb = await db_service.get_mongodb()
+            entities_collection = mongodb.entities
+            relations_collection = mongodb.relations
             
             # 统计实体总数
             total_entities = await entities_collection.count_documents({"is_valid": True})
