@@ -1,7 +1,7 @@
 import logging
+import json
 from typing import Dict, Any, Optional, List
 import httpx
-from openai import AsyncOpenAI, OpenAIError
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -11,14 +11,16 @@ class LLMService:
     """LLM服务接口"""
     
     def __init__(self):
-        # 简化初始化，避免OpenAI客户端问题
+        # 初始化Kimi API配置
         self.local_llm_enabled = settings.LOCAL_LLM_ENABLED
         self.local_llm_url = settings.LOCAL_LLM_URL
         self.local_llm_model = settings.LOCAL_LLM_MODEL
         self.local_llm_timeout = settings.LOCAL_LLM_TIMEOUT
         
-        # 暂时不初始化OpenAI客户端，避免兼容性问题
-        self.openai_client = None
+        # Kimi API配置
+        self.kimi_api_key = settings.API_KEY
+        self.kimi_api_base = settings.API_BASE
+        self.kimi_model = settings.MODEL
         
         self.logger = logger.getChild("LLMService")
         self.initialized = False
@@ -45,9 +47,6 @@ class LLMService:
         关闭LLM服务
         """
         try:
-            if hasattr(self, 'openai_client') and self.openai_client:
-                # 如果OpenAI客户端被初始化，可以在这里关闭
-                self.openai_client = None
             self.logger.info("LLM服务已关闭")
         except Exception as e:
             self.logger.warning(f"LLM服务关闭发生错误: {str(e)}")
@@ -63,38 +62,15 @@ class LLMService:
     ) -> str:
         """生成文本响应"""
         try:
-            # 优先使用本地LLM
-            if self.local_llm_enabled:
-                try:
-                    return await self._generate_with_local_llm(
-                        prompt, system_message, max_tokens, temperature
-                    )
-                except Exception as e:
-                    self.logger.error(f"本地LLM调用失败: {str(e)}")
-                    if not use_fallback:
-                        raise
-            
-            # 使用Kimi作为降级方案
-            try:
-                return await self._generate_with_kimi(
-                    prompt, system_message, max_tokens, temperature
-                )
-            except Exception as e:
-                self.logger.error(f"Kimi调用失败: {str(e)}")
-                if not use_fallback:
-                    raise
-            
-            # 使用OpenAI作为最后降级方案
-            if self.openai_client:
-                return await self._generate_with_openai(
-                    prompt, system_message, max_tokens, temperature
-                )
-            
-            raise RuntimeError("没有可用的LLM服务")
-            
+            # 直接调用Kimi API，因为LOCAL_LLM_ENABLED=false
+            self.logger.info(f"调用Kimi API生成文本，prompt: {prompt[:50]}...")
+            return await self._generate_with_kimi(
+                prompt, system_message, max_tokens, temperature
+            )
         except Exception as e:
-            self.logger.error(f"LLM生成失败: {str(e)}")
-            raise
+            self.logger.error(f"LLM生成失败: {str(e)}", exc_info=True)
+            # 直接返回错误信息，而不是抛出异常
+            return f"调用失败: {str(e)}"
     
     async def _generate_with_local_llm(
         self, 
@@ -129,30 +105,7 @@ class LLMService:
             else:
                 raise ValueError(f"本地LLM返回格式错误: {result}")
     
-    async def _generate_with_openai(
-        self, 
-        prompt: str, 
-        system_message: Optional[str],
-        max_tokens: int,
-        temperature: float
-    ) -> str:
-        """使用OpenAI生成文本"""
-        if not self.openai_client:
-            raise ValueError("OpenAI客户端未初始化")
-        
-        messages = []
-        if system_message:
-            messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": prompt})
-        
-        response = await self.openai_client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature
-        )
-        
-        return response.choices[0].message.content
+
     
     async def _generate_with_kimi(
         self, 
@@ -167,47 +120,50 @@ class LLMService:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
         
-        async with httpx.AsyncClient(timeout=self.local_llm_timeout) as client:
-            response = await client.post(
-                f"{settings.API_BASE}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": settings.MODEL,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "stream": False
-                }
-            )
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            if "choices" in result and result["choices"]:
-                return result["choices"][0]["message"]["content"]
-            else:
-                raise ValueError(f"Kimi返回格式错误: {result}")
+        self.logger.info(f"Kimi API请求: model={settings.MODEL}, max_tokens={max_tokens}, temperature={temperature}")
+        self.logger.debug(f"Kimi API请求消息: {json.dumps(messages, ensure_ascii=False)}")
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{settings.API_BASE}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": settings.MODEL,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "stream": False
+                    }
+                )
+                
+                self.logger.info(f"Kimi API响应状态码: {response.status_code}")
+                self.logger.debug(f"Kimi API响应内容: {response.text}")
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                if "choices" in result and result["choices"]:
+                    content = result["choices"][0]["message"]["content"]
+                    self.logger.info(f"Kimi API生成成功，内容长度: {len(content)}")
+                    return content
+                else:
+                    self.logger.error(f"Kimi返回格式错误: {json.dumps(result, ensure_ascii=False)}")
+                    raise ValueError(f"Kimi返回格式错误，缺少choices字段: {result}")
+        except httpx.HTTPStatusError as e:
+            self.logger.error(f"Kimi API请求失败，状态码: {e.response.status_code}, 响应内容: {e.response.text}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Kimi API调用异常: {str(e)}", exc_info=True)
+            raise
     
     async def extract_entities_and_relations(self, text: str) -> Dict[str, Any]:
         # 简单实现，避免引号问题
         system_prompt = "你是一个专业的信息提取助手"
         user_prompt = "提取实体和关系: " + text[:500]
-        
-        try:
-            result = await self.generate_text(user_prompt, system_prompt)
-            # 返回默认值，避免JSON解析错误
-            return {
-                "entities": [],
-                "relations": []
-            }
-        except Exception:
-            return {
-                "entities": [],
-                "relations": []
-            }
         
         try:
             result = await self.generate_text(
@@ -218,12 +174,15 @@ class LLMService:
             )
             
             # 解析JSON结果
-            import json
             parsed_result = json.loads(result)
             return parsed_result
         except Exception as e:
             self.logger.error(f"实体关系提取失败: {str(e)}")
-            raise
+            # 返回默认值，避免JSON解析错误
+            return {
+                "entities": [],
+                "relations": []
+            }
     
     async def analyze_document_type(self, text: str) -> Dict[str, Any]:
         # 简单实现，避免引号问题
@@ -288,7 +247,7 @@ class LLMService:
                 temperature=temperature
             )
             
-            # 返回与openai_service兼容的格式
+            # 返回标准格式的回复
             return {
                 "content": response_text,
                 "role": "assistant"

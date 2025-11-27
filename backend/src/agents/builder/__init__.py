@@ -20,7 +20,7 @@ def create_builder_agent(knowledge_repository: KnowledgeRepository) -> BuilderAg
         构建者智能体实例
     """
     # 根据配置选择合适的构建者智能体实现
-    if settings.USE_LOCAL_LLM or settings.OPENAI_API_KEY:
+    if settings.USE_LOCAL_LLM or settings.API_KEY:
         logger.info("创建LLM构建者智能体")
         return LLMBuilderAgent(knowledge_repository)
     else:

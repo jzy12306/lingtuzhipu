@@ -25,47 +25,7 @@ class KnowledgeRepository:
         self.neo4j_driver = neo4j_driver
         self.logger = logger.getChild("KnowledgeRepository")
     
-    async def search_entities(self, query: str) -> List[Dict[str, Any]]:
-        """根据查询搜索实体
-        
-        Args:
-            query: 搜索查询字符串
-            
-        Returns:
-            实体列表
-        """
-        try:
-            driver = await self.get_neo4j_driver()
-            
-            # 使用Neo4j的全文搜索或模糊匹配查找实体
-            search_query = """
-            MATCH (e:Entity)
-            WHERE e.is_valid = true AND 
-                  (e.name CONTAINS $query OR e.type CONTAINS $query)
-            RETURN e
-            LIMIT 50
-            """
-            
-            async with driver.session() as session:
-                result = await session.run(search_query, query=query)
-                entities = []
-                
-                async for record in result:
-                    entity_node = record["e"]
-                    entity = {
-                        "id": entity_node.get("id"),
-                        "name": entity_node.get("name"),
-                        "type": entity_node.get("type"),
-                        "confidence_score": entity_node.get("confidence_score"),
-                        "source_document_id": entity_node.get("source_document_id")
-                    }
-                    entities.append(entity)
-                
-                return entities
-                
-        except Exception as e:
-            self.logger.error(f"搜索实体时发生错误: {str(e)}")
-            raise
+
     
     async def get_neo4j_driver(self):
         """获取Neo4j驱动"""

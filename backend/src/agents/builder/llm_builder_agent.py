@@ -4,14 +4,12 @@ import re
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
-import openai
-from openai import OpenAI
-
 from src.agents.builder.builder_agent import BuilderAgent
 from src.models.knowledge import Entity, Relation
 from src.models.document import Document
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.config.settings import settings
+from src.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -21,23 +19,7 @@ class LLMBuilderAgent(BuilderAgent):
     
     def __init__(self, knowledge_repository: KnowledgeRepository):
         super().__init__(knowledge_repository)
-        self.llm_client = self._init_llm_client()
         logger.info("LLM构建者智能体初始化完成")
-    
-    def _init_llm_client(self):
-        """初始化LLM客户端"""
-        if settings.USE_LOCAL_LLM:
-            # 使用本地LLM（如LM Studio）
-            logger.info(f"使用本地LLM: {settings.LOCAL_LLM_URL}")
-            return OpenAI(
-                base_url=settings.LOCAL_LLM_URL,
-                api_key="not-needed-for-local-llm"
-            )
-        else:
-            # 使用OpenAI API
-            if not settings.OPENAI_API_KEY:
-                logger.warning("OpenAI API密钥未设置，使用默认值")
-            return OpenAI(api_key=settings.OPENAI_API_KEY)
     
     async def process_document(self, document: Document) -> Dict:
         """处理文档并提取知识"""
@@ -296,22 +278,15 @@ class LLMBuilderAgent(BuilderAgent):
     async def _call_llm(self, prompt: str) -> str:
         """调用LLM服务"""
         try:
-            # 确保使用异步调用
-            import asyncio
-            
-            # 同步调用，需要在异步环境中运行
-            response = await asyncio.to_thread(
-                self.llm_client.chat.completions.create,
-                model="gpt-4-turbo" if not settings.USE_LOCAL_LLM else "local-model",
-                messages=[
-                    {"role": "system", "content": "你是一个专业的知识图谱构建助手。请严格按照要求的格式输出JSON。"},
-                    {"role": "user", "content": prompt}
-                ],
+            # 使用LLMService调用Kimi API
+            response = await llm_service.generate_text(
+                prompt=prompt,
+                system_message="你是一个专业的知识图谱构建助手。请严格按照要求的格式输出JSON。",
                 max_tokens=2000,
                 temperature=0.3
             )
             
-            return response.choices[0].message.content.strip()
+            return response.strip()
             
         except Exception as e:
             logger.error(f"LLM调用失败: {str(e)}")

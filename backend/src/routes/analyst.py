@@ -11,9 +11,6 @@ from src.config.settings import settings
 
 from src.core.security import get_current_user
 from src.models.user import User
-from src.services.analyst_agent import analyst_agent
-from src.services.document_service import document_service
-from src.services.knowledge_graph_service import knowledge_graph_service
 from src.services.analyst_agent_service import AnalystAgentService
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.schemas.analyst import (
@@ -255,8 +252,11 @@ async def test_query(
     用于测试分析师智能体的查询功能
     """
     try:
-        # 直接使用analyst_agent实例处理查询
-        result = await analyst_agent.process_query(
+        # 使用延迟导入避免循环依赖
+        from src.services.service_factory import service_factory
+        
+        # 通过service_factory获取analyst_agent实例处理查询
+        result = await service_factory.analyst_agent.process_query(
             query=request.query,
             user_context={"user_id": "test_user"}
         )

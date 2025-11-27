@@ -6,7 +6,6 @@ from src.services.db_service import DatabaseService
 from src.services.llm_service import LLMService
 from src.services.document_service import DocumentService
 from src.services.knowledge_graph_service import KnowledgeGraphService
-from src.services.analyst_agent import AnalystAgent
 from src.services.ocr_service import OCRService
 from src.repositories.user_repository import UserRepository
 from src.repositories.document_repository import DocumentRepository
@@ -85,9 +84,11 @@ class ServiceFactory:
         return self._knowledge_graph_service
     
     @property
-    def analyst_agent(self) -> AnalystAgent:
+    def analyst_agent(self):
         """获取分析师智能体实例"""
         if self._analyst_agent is None:
+            # 使用延迟导入避免循环依赖
+            from src.services.analyst_agent import AnalystAgent
             self._analyst_agent = AnalystAgent()
         return self._analyst_agent
     
@@ -123,6 +124,13 @@ class ServiceFactory:
         if self._query_history_repository is None:
             self._query_history_repository = QueryHistoryRepository()
         return self._query_history_repository
+    
+    @property
+    def ocr_service(self) -> OCRService:
+        """获取OCR服务实例"""
+        if self._ocr_service is None:
+            self._ocr_service = OCRService()
+        return self._ocr_service
     
     async def initialize_all(self):
         """初始化所有服务"""
@@ -204,14 +212,3 @@ class ServiceFactory:
 
 # 创建全局服务工厂实例
 service_factory = ServiceFactory()
-
-# 导出常用服务和仓库的快捷方式
-db_service = service_factory.db_service
-llm_service = service_factory.llm_service
-document_service = service_factory.document_service
-knowledge_graph_service = service_factory.knowledge_graph_service
-analyst_agent = service_factory.analyst_agent
-ocr_service = service_factory.ocr_service
-user_repository = service_factory.user_repository
-document_repository = service_factory.document_repository
-query_history_repository = service_factory.query_history_repository

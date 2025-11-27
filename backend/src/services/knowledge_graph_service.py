@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import List, Dict, Optional, Any
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.models.knowledge import KnowledgeGraphQuery, KnowledgeGraphResponse
@@ -9,6 +10,7 @@ class KnowledgeGraphService:
     """知识图谱服务"""
     
     def __init__(self):
+        from src.repositories.knowledge_repository import KnowledgeRepository
         self._repository = KnowledgeRepository()
         self._is_initialized = False
     
@@ -34,9 +36,13 @@ class KnowledgeGraphService:
     async def search_entities(self, query: str) -> List[Dict[str, Any]]:
         """搜索实体"""
         try:
-            return await self._repository.search_entities(query)
+            logger.info(f"搜索实体: {query}")
+            entities = await self._repository.search_entities(query)
+            logger.info(f"搜索到 {len(entities)} 个实体")
+            logger.debug(f"搜索到的实体: {json.dumps(entities, ensure_ascii=False)}")
+            return entities
         except Exception as e:
-            logger.error(f"搜索实体失败: {str(e)}")
+            logger.error(f"搜索实体失败: {str(e)}", exc_info=True)
             return []
     
     async def get_stats(self) -> Dict[str, int]:
@@ -65,5 +71,5 @@ class KnowledgeGraphService:
                 "error": str(e)
             }
 
-# 创建设置为 None
-knowledge_graph_service: Optional[KnowledgeGraphService] = None
+# 创建知识图谱服务实例
+knowledge_graph_service = KnowledgeGraphService()

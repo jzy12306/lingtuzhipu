@@ -1,5 +1,4 @@
 from typing import Optional, Dict, Any, List
-from src.services.analyst_agent import analyst_agent
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.services.document_service import DocumentService
 
@@ -13,14 +12,17 @@ class AnalystAgentService:
     def __init__(self, knowledge_repository: KnowledgeRepository, document_service: DocumentService):
         self.knowledge_repository = knowledge_repository
         self.document_service = document_service
-        self.analyst_agent = analyst_agent
+        # 不再直接导入analyst_agent，改为在需要时通过service_factory获取
     
     async def analyze_query(self, query: str) -> Dict[str, Any]:
         """
         分析查询复杂度
         """
+        # 使用延迟导入避免循环依赖
+        from src.services.service_factory import service_factory
+        
         # 调用分析师代理进行查询分析
-        result = await self.analyst_agent.analyze_query_complexity(query)
+        result = await service_factory.analyst_agent.analyze_query_complexity(query)
         return result
     
     async def generate_answer(self, query: str, user_context: Optional[Dict[str, Any]] = None) -> str:

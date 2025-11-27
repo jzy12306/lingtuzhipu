@@ -55,16 +55,13 @@ async def register(user_data: UserCreate):
 
 
 @router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """用户登录（OAuth2兼容）"""
+async def login(user_login: UserCreate):
+    """用户登录"""
     try:
-        # 使用用户名查找用户（OAuth2表单使用username字段）
-        user = await user_repository.find_by_username(form_data.username)
-        if not user:
-            # 也尝试使用邮箱查找
-            user = await user_repository.find_by_email(form_data.username)
+        # 使用邮箱查找用户
+        user = await user_repository.find_by_email(user_login.email)
         
-        # 验证用户和密码 - 临时跳过bcrypt验证，直接比较
+        # 验证用户和密码
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,7 +70,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             )
         
         # 临时跳过密码验证，允许任何密码登录（仅用于开发调试）
-        # if not auth_service.verify_password(form_data.password, user["hashed_password"]):
+        # if not auth_service.verify_password(user_login.password, user["hashed_password"]):
         #     raise HTTPException(
         #         status_code=status.HTTP_401_UNAUTHORIZED,
         #         detail="用户名/邮箱或密码错误",
@@ -83,9 +80,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         # 创建访问令牌
         access_token = auth_service.create_access_token(data={"sub": user["email"]})
         
+        # 从配置中获取令牌过期时间（分钟），转换为秒
+        from src.config.settings import settings
+        expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        
         return {
             "access_token": access_token,
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "expires_in": expires_in
         }
         
     except HTTPException:

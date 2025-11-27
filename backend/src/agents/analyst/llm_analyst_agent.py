@@ -8,7 +8,7 @@ from datetime import datetime
 from agents.analyst.analyst_agent import AnalystAgent
 from repositories.knowledge_repository import KnowledgeRepository
 from utils.config import settings
-from services.openai_service import OpenAIService
+from services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ class LLMAnalystAgent(AnalystAgent):
     
     def __init__(self, knowledge_repository: KnowledgeRepository):
         self.knowledge_repository = knowledge_repository
-        self.openai_service = OpenAIService()
         self.max_complexity_level = 5  # 最大查询复杂度级别
         logger.info("LLMAnalystAgent初始化完成")
     
@@ -104,14 +103,14 @@ class LLMAnalystAgent(AnalystAgent):
             """
             
             # 调用LLM生成查询
-            response = await self.openai_service.chat_completion(
+            response = await llm_service.chat_completion(
                 messages=[{"role": "system", "content": "你是一个专业的知识图谱查询生成器。"},
                          {"role": "user", "content": prompt}],
                 model=settings.LLM_MODEL,
                 response_format={"type": "json_object"}
             )
             
-            query_data = json.loads(response)
+            query_data = response
             return self.format_response(True, query_data)
             
         except Exception as e:
@@ -179,14 +178,14 @@ class LLMAnalystAgent(AnalystAgent):
             }
             """
             
-            response = await self.openai_service.chat_completion(
+            response = await llm_service.chat_completion(
                 messages=[{"role": "system", "content": "你是一个专业的数据分析师。"},
                          {"role": "user", "content": prompt}],
                 model=settings.LLM_MODEL,
                 response_format={"type": "json_object"}
             )
             
-            explanation = json.loads(response)
+            explanation = response
             return self.format_response(True, explanation)
             
         except Exception as e:
@@ -238,14 +237,14 @@ class LLMAnalystAgent(AnalystAgent):
                 }
                 """
                 
-                response = await self.openai_service.chat_completion(
+                response = await llm_service.chat_completion(
                     messages=[{"role": "system", "content": "你是一个Python代码执行模拟器。"},
                              {"role": "user", "content": prompt}],
                     model=settings.LLM_MODEL,
                     response_format={"type": "json_object"}
                 )
                 
-                execution_result = json.loads(response)
+                execution_result = response
                 return self.format_response(True, execution_result)
             else:
                 # 对于其他语言或复杂代码，返回受限信息
@@ -280,14 +279,14 @@ class LLMAnalystAgent(AnalystAgent):
             }
             """
             
-            response = await self.openai_service.chat_completion(
+            response = await llm_service.chat_completion(
                 messages=[{"role": "system", "content": "你是一个查询复杂度分析师。"},
                          {"role": "user", "content": prompt}],
                 model=settings.LLM_MODEL,
                 response_format={"type": "json_object"}
             )
             
-            complexity = json.loads(response)
+            complexity = response
             return complexity
             
         except Exception as e:

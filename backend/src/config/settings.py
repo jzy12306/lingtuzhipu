@@ -26,9 +26,7 @@ class Settings(BaseSettings):
     LOCAL_LLM_MODEL: str = "qwen2.5-7b-instruct-1m"
     LOCAL_LLM_TIMEOUT: int = 120
     
-    # LLM配置 - OpenAI (降级方案)
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
+
     
     # LLM配置 - Kimi
     API_KEY: str = ""

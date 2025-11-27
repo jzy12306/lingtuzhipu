@@ -102,9 +102,16 @@ class UserRepository:
             if "updated_at" not in user_data:
                 user_data["updated_at"] = datetime.utcnow()
             
-            # 如果包含密码，进行加密
-            if "password" in user_data and not user_data["password"].startswith("$2b$"):
-                user_data["password"] = self.get_password_hash(user_data["password"])
+            # 处理密码加密
+            if "password" in user_data:
+                # 如果包含密码字段，进行加密
+                if not user_data["password"].startswith("$2b$"):
+                    user_data["hashed_password"] = self.get_password_hash(user_data["password"])
+                # 移除明文密码
+                del user_data["password"]
+            elif "hashed_password" not in user_data:
+                # 如果没有提供密码或哈希密码，使用默认密码
+                user_data["hashed_password"] = self.get_password_hash("default_password")
             
             result = await collection.insert_one(user_data)
             user_data["id"] = str(result.inserted_id)

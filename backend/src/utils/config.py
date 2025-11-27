@@ -54,7 +54,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     
     # LLM设置
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     USE_LOCAL_LLM: bool = os.getenv("USE_LOCAL_LLM", "False").lower() == "true"
     LOCAL_LLM_URL: str = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1")
     

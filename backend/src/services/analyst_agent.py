@@ -6,9 +6,7 @@ from typing import List, Dict, Any, Optional, Union, AsyncGenerator
 from datetime import datetime
 import re
 
-from src.services.llm_service import llm_service
-from src.services.knowledge_graph_service import knowledge_graph_service
-from src.services.document_service import document_service
+
 from src.repositories.query_history_repository import QueryHistoryRepository
 from src.schemas.analyst import QueryComplexity
 
@@ -62,6 +60,9 @@ class AnalystAgent:
         start_time = time.time()
         
         try:
+            # 使用延迟导入避免循环依赖
+            from src.services.service_factory import service_factory
+            
             logger.info(f"收到查询请求: {query}")
             logger.info(f"用户上下文: {user_context}")
             
@@ -70,7 +71,7 @@ class AnalystAgent:
             logger.info(f"构建的查询上下文: {context}")
             
             # 调用LLM进行查询处理
-            llm_response = await llm_service.chat_completion(
+            llm_response = await service_factory.llm_service.chat_completion(
                 messages=[
                     {
                         "role": "system",
@@ -108,7 +109,7 @@ class AnalystAgent:
                 "generated_code": generated_code,
                 "visualization_data": visualization_data,
                 "related_entities": related_entities,
-                "confidence_score": 0.85,  # 模拟置信度
+                "confidence": 0.85,  # 模拟置信度
                 "execution_time": time.time() - start_time
             }
             
@@ -117,39 +118,17 @@ class AnalystAgent:
             
         except Exception as e:
             logger.error(f"处理查询失败: {str(e)}", exc_info=True)
-            # 返回一个模拟的结果，用于测试
-            return {
-                "id": f"query_{int(time.time())}_{user_context.get('user_id', 'anonymous')}",
-                "summary": "腾讯公司介绍",
-                "detailed_answer": "腾讯公司是中国领先的互联网科技公司，成立于1998年，总部位于深圳。主要业务包括社交网络、游戏、金融科技、云计算等。旗下拥有微信、QQ、腾讯游戏、腾讯云等知名产品和服务。",
-                "generated_code": None,
-                "visualization_data": {
-                    "type": "chart",
-                    "chartType": "bar",
-                    "data": {
-                        "labels": ["社交网络", "游戏", "金融科技", "云计算"],
-                        "datasets": [{
-                            "label": "业务占比",
-                            "data": [35, 40, 15, 10]
-                        }]
-                    }
-                },
-                "related_entities": [
-                    {"name": "腾讯公司", "type": "公司"},
-                    {"name": "微信", "type": "产品"},
-                    {"name": "QQ", "type": "产品"},
-                    {"name": "腾讯游戏", "type": "业务"},
-                    {"name": "腾讯云", "type": "业务"}
-                ],
-                "confidence_score": 0.95,
-                "execution_time": time.time() - start_time
-            }
+            # 抛出异常，让上层处理
+            raise
     
     async def stream_query_processing(self, query: str, user_context: Dict[str, Any],
                                     document_ids: Optional[List[str]] = None) -> AsyncGenerator[Dict[str, Any], None]:
 
         """流式处理查询"""
         try:
+            # 使用延迟导入避免循环依赖
+            from src.services.service_factory import service_factory
+            
             # 流式返回处理步骤
             yield {"type": "processing", "message": "正在分析查询..."}
             
@@ -162,7 +141,7 @@ class AnalystAgent:
             yield {"type": "processing", "message": "正在生成答案..."}
             
             # 调用LLM获取结果
-            llm_stream = llm_service.stream_chat_completion(
+            llm_stream = service_factory.llm_service.stream_chat_completion(
                 messages=[
                     {
                         "role": "system",
@@ -253,8 +232,11 @@ class AnalystAgent:
     async def analyze_document(self, document: Dict[str, Any], analysis_type: str) -> Dict[str, Any]:
         """分析文档"""
         try:
+            # 使用延迟导入避免循环依赖
+            from src.services.service_factory import service_factory
+            
             # 调用LLM进行文档分析
-            llm_response = await llm_service.chat_completion(
+            llm_response = await service_factory.llm_service.chat_completion(
                 messages=[
                     {
                         "role": "system",
@@ -289,8 +271,11 @@ class AnalystAgent:
     async def analyze_knowledge_graph(self, graph_data: Dict[str, Any], analysis_type: str) -> Dict[str, Any]:
         """分析知识图谱"""
         try:
+            # 使用延迟导入避免循环依赖
+            from src.services.service_factory import service_factory
+            
             # 调用LLM分析图谱数据
-            llm_response = await llm_service.chat_completion(
+            llm_response = await service_factory.llm_service.chat_completion(
                 messages=[
                     {
                         "role": "system",
@@ -376,12 +361,15 @@ class AnalystAgent:
         """构建查询上下文"""
         context = {}
         
+        # 使用延迟导入避免循环依赖
+        from src.services.service_factory import service_factory
+        
         # 获取相关文档
         if document_ids:
             documents = []
             for doc_id in document_ids[:5]:  # 限制数量
                 try:
-                    doc = await document_service.get_document(doc_id)
+                    doc = await service_factory.document_service.get_document(doc_id)
                     if doc:
                         documents.append({
                             "id": doc.id,
@@ -393,7 +381,7 @@ class AnalystAgent:
             context["documents"] = documents
         
         # 获取相关知识图谱数据
-        graph_entities = await knowledge_graph_service.search_entities(query)
+        graph_entities = await service_factory.knowledge_graph_service.search_entities(query)
         context["graph_data"] = {
             "entities": graph_entities[:10]
         }
@@ -403,8 +391,11 @@ class AnalystAgent:
     async def _generate_query_code(self, query: str, context: Dict[str, Any]) -> Optional[str]:
         """为查询生成代码"""
         try:
+            # 使用延迟导入避免循环依赖
+            from src.services.service_factory import service_factory
+            
             # 调用LLM生成代码
-            llm_response = await llm_service.chat_completion(
+            llm_response = await service_factory.llm_service.chat_completion(
                 messages=[
                     {
                         "role": "system",
@@ -428,7 +419,16 @@ class AnalystAgent:
         """提取相关实体"""
         # 从上下文的图谱数据中提取实体
         entities = context.get("graph_data", {}).get("entities", [])
-        return entities[:5]  # 限制返回数量
+        
+        # 转换实体格式，确保前端需要的字段存在
+        result_entities = []
+        for entity in entities[:5]:  # 限制返回数量
+            result_entities.append({
+                "name": entity.name if hasattr(entity, 'name') else entity.get('name', ''),
+                "type": entity.type if hasattr(entity, 'type') else entity.get('type', '未知')
+            })
+        
+        return result_entities
     
     async def _generate_visualization_data(self, query: str, answer: str) -> Optional[Dict[str, Any]]:
         """生成可视化数据"""
@@ -457,5 +457,3 @@ class AnalystAgent:
         self.is_initialized = False
 
 
-# 创建全局实例
-analyst_agent = AnalystAgent()
