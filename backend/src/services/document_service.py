@@ -7,6 +7,7 @@ from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.agents.builder import BuilderAgentService
 from src.services.ocr_service import ocr_service
+from src.services.table_extraction_service import table_extraction_service
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,11 @@ logger = logging.getLogger(__name__)
 class DocumentService:
     def __init__(self,
                  document_repository: DocumentRepository,
-                 knowledge_repository: KnowledgeRepository):
+                 knowledge_repository: KnowledgeRepository,
+                 cross_modal_service=None):
         self.document_repository = document_repository
         self.knowledge_repository = knowledge_repository
+        self.cross_modal_service = cross_modal_service
         self.initialized = False
         self.logger = logger.getChild("DocumentService")
     
@@ -119,6 +122,23 @@ class DocumentService:
                 user_id=user_id
             )
             
+            # 提取表格数据
+            tables = await table_extraction_service.extract_tables_from_document(
+                document_id=document_id,
+                document_type=document.type,
+                content=content
+            )
+            
+            # 将表格数据转换为知识图谱格式
+            if tables:
+                table_knowledge = []
+                for table in tables:
+                    table_knowledge.append(await table_extraction_service.convert_table_to_knowledge(table))
+                
+                # 将表格知识添加到结果中
+                result['table_knowledge'] = table_knowledge
+                result['tables_count'] = len(tables)
+            
             if result['success']:
                 # 更新文档状态
                 await self.document_repository.update_document(
@@ -129,7 +149,8 @@ class DocumentService:
                         'processed_at': datetime.now(),
                         'updated_at': datetime.now(),
                         'extracted_entities': result.get('entities_count', 0),
-                        'extracted_relationships': result.get('relationships_count', 0)
+                        'extracted_relationships': result.get('relationships_count', 0),
+                        'extracted_tables': result.get('tables_count', 0)
                     }
                 )
                 logger.info(f"文档处理成功: {document_id}, 提取实体: {result.get('entities_count', 0)}, 关系: {result.get('relationships_count', 0)}")

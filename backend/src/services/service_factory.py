@@ -7,6 +7,8 @@ from src.services.llm_service import LLMService
 from src.services.document_service import DocumentService
 from src.services.knowledge_graph_service import KnowledgeGraphService
 from src.services.ocr_service import OCRService
+from src.services.cross_modal_service import CrossModalService
+from src.services.table_extraction_service import TableExtractionService
 from src.repositories.user_repository import UserRepository
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
@@ -40,6 +42,8 @@ class ServiceFactory:
             self._knowledge_graph_service: Optional[KnowledgeGraphService] = None
             self._analyst_agent: Optional[AnalystAgent] = None
             self._ocr_service: Optional[OCRService] = None
+            self._cross_modal_service: Optional[CrossModalService] = None
+            self._table_extraction_service: Optional[TableExtractionService] = None
             self._user_repository: Optional[UserRepository] = None
             self._document_repository: Optional[DocumentRepository] = None
             self._knowledge_repository: Optional[KnowledgeRepository] = None
@@ -72,7 +76,8 @@ class ServiceFactory:
         if self._document_service is None:
             self._document_service = DocumentService(
                 document_repository=self.document_repository,
-                knowledge_repository=self.knowledge_repository
+                knowledge_repository=self.knowledge_repository,
+                cross_modal_service=self.cross_modal_service
             )
         return self._document_service
     
@@ -132,6 +137,22 @@ class ServiceFactory:
             self._ocr_service = OCRService()
         return self._ocr_service
     
+    @property
+    def cross_modal_service(self) -> CrossModalService:
+        """获取跨模态数据关联服务实例"""
+        if self._cross_modal_service is None:
+            self._cross_modal_service = CrossModalService(
+                llm_service=self.llm_service
+            )
+        return self._cross_modal_service
+    
+    @property
+    def table_extraction_service(self) -> TableExtractionService:
+        """获取表格数据提取服务实例"""
+        if self._table_extraction_service is None:
+            self._table_extraction_service = TableExtractionService()
+        return self._table_extraction_service
+    
     async def initialize_all(self):
         """初始化所有服务"""
         try:
@@ -148,6 +169,18 @@ class ServiceFactory:
             # 初始化LLM服务
             await self.llm_service.initialize()
             logger.info("LLM服务初始化完成")
+            
+            # 初始化OCR服务
+            await self.ocr_service.initialize()
+            logger.info("OCR服务初始化完成")
+            
+            # 初始化表格数据提取服务
+            await self.table_extraction_service.initialize()
+            logger.info("表格数据提取服务初始化完成")
+            
+            # 初始化跨模态数据关联服务
+            await self.cross_modal_service.initialize()
+            logger.info("跨模态数据关联服务初始化完成")
             
             # 初始化文档服务
             await self.document_service.initialize()
@@ -169,6 +202,24 @@ class ServiceFactory:
                 await self._document_service.shutdown()
                 self._document_service = None
                 logger.info("文档服务已关闭")
+            
+            # 关闭跨模态数据关联服务
+            if self._cross_modal_service:
+                await self._cross_modal_service.shutdown()
+                self._cross_modal_service = None
+                logger.info("跨模态数据关联服务已关闭")
+            
+            # 关闭表格数据提取服务
+            if self._table_extraction_service:
+                await self._table_extraction_service.shutdown()
+                self._table_extraction_service = None
+                logger.info("表格数据提取服务已关闭")
+            
+            # 关闭OCR服务
+            if self._ocr_service:
+                await self._ocr_service.shutdown()
+                self._ocr_service = None
+                logger.info("OCR服务已关闭")
             
             # 关闭LLM服务
             if self._llm_service:

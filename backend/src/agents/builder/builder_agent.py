@@ -33,7 +33,7 @@ class BuilderAgent(ABC):
         pass
     
     @abstractmethod
-    async def extract_entities(self, content: str, document_id: str, user_id: str) -> List[Entity]:
+    async def extract_entities(self, content: str, document_id: str, user_id: str, industry: Optional[str] = None) -> List[Entity]:
         """
         从文本内容中提取实体
         
@@ -41,6 +41,7 @@ class BuilderAgent(ABC):
             content: 文档文本内容
             document_id: 文档ID
             user_id: 用户ID
+            industry: 行业类型（可选）
             
         Returns:
             提取的实体列表

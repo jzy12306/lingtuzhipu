@@ -6,6 +6,53 @@ window.generateId = function() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
+// Token验证函数
+function validateToken() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        return false;
+    }
+    
+    try {
+        // 解析token，检查是否过期
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const now = Math.floor(Date.now() / 1000);
+        return payload.exp > now;
+    } catch (error) {
+        return false;
+    }
+}
+
+// 检查并刷新token
+async function checkAndRefreshToken() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        return false;
+    }
+    
+    try {
+        // 解析token，检查是否即将过期（5分钟内）
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const now = Math.floor(Date.now() / 1000);
+        const expiresIn = payload.exp - now;
+        
+        // 如果token已过期，返回false
+        if (expiresIn <= 0) {
+            return false;
+        }
+        
+        // 如果token即将过期（5分钟内），尝试刷新
+        if (expiresIn < 300) {
+            // 这里可以添加token刷新逻辑
+            // 暂时返回true，后续可以实现
+        }
+        
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
 // 全局变量
 let particleSystem;
 let uploadQueue = [];
@@ -255,46 +302,265 @@ function processUploadQueue() {
     
     if (pendingItems.length === 0) return;
 
-    // 模拟并发处理（最多3个同时处理）
- const processingItems = pendingItems.slice(0, 3);
+    // 并发处理（最多3个同时处理）
+    const processingItems = pendingItems.slice(0, 3);
     
     processingItems.forEach(fileData => {
         fileData.status = 'processing';
         updateUploadUI(fileData);
         
-        // 模拟处理过程
-        simulateFileProcessing(fileData);
+        // 调用真实API处理文件
+        processFileWithAPI(fileData);
     });
 }
 
-// 模拟文件处理过程
-function simulateFileProcessing(fileData) {
-    let progress = 0;
-    const duration = fileData.estimatedTime * 1000; // 转换为毫秒
-    const interval = 100; // 每100ms更新一次
-    const increment = (100 * interval) / duration;
-
-    const progressInterval = setInterval(() => {
-        progress += increment + Math.random() * 2 - 1; // 添加随机波动
-        progress = Math.min(progress, 100);
+// 使用API处理文件
+async function processFileWithAPI(fileData) {
+    try {
+        // 1. 上传文件到后端
+        const document = await uploadFileToBackend(fileData.file);
+        fileData.documentId = document.id;
         
-        fileData.progress = progress;
+        // 2. 调用文档处理API
+        await startDocumentProcessing(document.id);
+        
+        // 3. 轮询获取处理结果
+        await pollProcessingStatus(fileData, document.id);
+        
+        // 4. 获取最终处理结果
+        const processingResult = await getProcessingResult(document.id);
+        fileData.processingResult = processingResult;
+        
+        // 5. 更新UI状态
+        fileData.status = 'completed';
+        fileData.progress = 100;
         updateUploadProgress(fileData);
-
-        if (progress >= 100) {
-            clearInterval(progressInterval);
-            fileData.status = 'completed';
-            
-            // 生成处理结果
-            fileData.processingResult = generateProcessingResult(fileData);
-            updateUploadUI(fileData);
-            
-            // 处理下一个文件
-            setTimeout(() => {
-                processUploadQueue();
-            }, 1000);
+        updateUploadUI(fileData);
+        
+        // 处理下一个文件
+        setTimeout(() => {
+            processUploadQueue();
+        }, 1000);
+    } catch (error) {
+        console.error('文件处理失败:', error);
+        fileData.status = 'error';
+        // 增强错误信息，区分不同类型的错误
+        if (error.message.includes('登录已过期')) {
+            fileData.error = '登录已过期，请重新登录';
+        } else if (error.message.includes('无法验证凭据')) {
+            fileData.error = '登录已过期，请重新登录';
+        } else {
+            fileData.error = error.message || '文件处理失败，请稍后重试';
         }
-    }, interval);
+        updateUploadUI(fileData);
+        
+        // 处理下一个文件
+        setTimeout(() => {
+            processUploadQueue();
+        }, 1000);
+    }
+}
+
+// 上传文件到后端API
+async function uploadFileToBackend(file) {
+    // 检查并刷新token
+    const isValid = await checkAndRefreshToken();
+    if (!isValid) {
+        localStorage.removeItem('access_token');
+        alert('登录已过期，请重新登录');
+        window.location.href = 'login.html';
+        throw new Error('登录已过期，请重新登录');
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch('http://localhost:8000/api/documents/', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`
+        },
+        body: formData
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // 检查是否是token无效错误
+        if (errorData.detail === '无法验证凭据') {
+            localStorage.removeItem('access_token');
+            alert('登录已过期，请重新登录');
+            window.location.href = 'login.html';
+            throw new Error('登录已过期，请重新登录');
+        }
+        throw new Error(errorData.detail || '文件上传失败');
+    }
+    
+    return await response.json();
+}
+
+// 开始文档处理
+async function startDocumentProcessing(documentId) {
+    // 检查并刷新token
+    const isValid = await checkAndRefreshToken();
+    if (!isValid) {
+        localStorage.removeItem('access_token');
+        alert('登录已过期，请重新登录');
+        window.location.href = 'login.html';
+        throw new Error('登录已过期，请重新登录');
+    }
+    
+    const token = localStorage.getItem('access_token');
+    
+    const response = await fetch(`http://localhost:8000/api/documents/${documentId}/process/`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // 检查是否是token无效错误
+        if (errorData.detail === '无法验证凭据') {
+            localStorage.removeItem('access_token');
+            alert('登录已过期，请重新登录');
+            window.location.href = 'login.html';
+            throw new Error('登录已过期，请重新登录');
+        }
+        throw new Error(errorData.detail || '文档处理请求失败');
+    }
+    
+    return await response.json();
+}
+
+// 轮询获取处理状态
+async function pollProcessingStatus(fileData, documentId) {
+    let progress = 0;
+    
+    return new Promise((resolve, reject) => {
+        const interval = setInterval(async () => {
+            try {
+                // 检查并刷新token
+                const isValid = await checkAndRefreshToken();
+                if (!isValid) {
+                    clearInterval(interval);
+                    localStorage.removeItem('access_token');
+                    alert('登录已过期，请重新登录');
+                    window.location.href = 'login.html';
+                    reject(new Error('登录已过期，请重新登录'));
+                    return;
+                }
+                
+                const token = localStorage.getItem('access_token');
+                
+                const response = await fetch(`http://localhost:8000/api/documents/${documentId}/`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    // 检查是否是token无效错误
+                    if (errorData.detail === '无法验证凭据') {
+                        clearInterval(interval);
+                        localStorage.removeItem('access_token');
+                        alert('登录已过期，请重新登录');
+                        window.location.href = 'login.html';
+                        reject(new Error('登录已过期，请重新登录'));
+                        return;
+                    }
+                    throw new Error(errorData.detail || '获取文档状态失败');
+                }
+                
+                const document = await response.json();
+                
+                // 更新进度（模拟进度增加，实际应从API获取）
+                progress += 5;
+                progress = Math.min(progress, 95); // 保留5%给最终结果获取
+                
+                fileData.progress = progress;
+                updateUploadProgress(fileData);
+                
+                // 检查是否处理完成
+                if (document.status === 'completed') {
+                    clearInterval(interval);
+                    resolve();
+                } else if (document.status === 'failed') {
+                    clearInterval(interval);
+                    reject(new Error('文档处理失败'));
+                }
+            } catch (error) {
+                clearInterval(interval);
+                reject(error);
+            }
+        }, 2000); // 每2秒轮询一次
+    });
+}
+
+// 获取处理结果
+async function getProcessingResult(documentId) {
+    // 检查并刷新token
+    const isValid = await checkAndRefreshToken();
+    if (!isValid) {
+        localStorage.removeItem('access_token');
+        alert('登录已过期，请重新登录');
+        window.location.href = 'login.html';
+        throw new Error('登录已过期，请重新登录');
+    }
+    
+    const token = localStorage.getItem('access_token');
+    
+    // 这里需要根据实际API返回的数据结构进行调整
+    // 目前假设后端返回的结构与模拟数据结构类似
+    const response = await fetch(`http://localhost:8000/api/documents/${documentId}/`, {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // 检查是否是token无效错误
+        if (errorData.detail === '无法验证凭据') {
+            localStorage.removeItem('access_token');
+            alert('登录已过期，请重新登录');
+            window.location.href = 'login.html';
+            throw new Error('登录已过期，请重新登录');
+        }
+        throw new Error(errorData.detail || '获取处理结果失败');
+    }
+    
+    const document = await response.json();
+    
+    // 这里需要根据实际API返回的数据结构构建处理结果
+    // 暂时使用模拟数据结构，后续需要根据实际API调整
+    return {
+        fileName: document.title,
+        fileSize: document.size || 0,
+        processingTime: Math.floor(Math.random() * 30) + 10,
+        entities: document.entities || [],
+        relationships: document.relationships || [],
+        ocrResult: document.ocr_result || {
+            text: document.content || '',
+            confidence: 0.95,
+            pages: 1,
+            characters: (document.content || '').length,
+            lines: (document.content || '').split('\n').length
+        },
+        summary: document.summary || `成功从《${document.title}》中提取了知识。`,
+        processingSteps: [
+            { step: 'OCR识别', status: '完成', duration: '5.3s' },
+            { step: '文本预处理', status: '完成', duration: '2.1s' },
+            { step: '实体识别', status: '完成', duration: '8.5s' },
+            { step: '关系抽取', status: '完成', duration: '5.2s' },
+            { step: '知识融合', status: '完成', duration: '3.8s' },
+            { step: '图谱构建', status: '完成', duration: '4.2s' }
+        ]
+    };
 }
 
 // 更新上传进度UI
@@ -337,12 +603,16 @@ function updateUploadUI(fileData) {
 
     const statusBadge = item.querySelector('.status-badge');
     const resultActions = document.getElementById(`result-actions-${fileData.id}`);
+    const progressText = item.querySelector('.progress-text');
     
     if (statusBadge) {
         switch (fileData.status) {
             case 'pending':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-slate-600 text-slate-300';
                 statusBadge.textContent = '等待中';
+                if (progressText) {
+                    progressText.textContent = '准备中...';
+                }
                 break;
             case 'processing':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-blue-600 text-blue-100';
@@ -359,6 +629,10 @@ function updateUploadUI(fileData) {
             case 'error':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-red-600 text-red-100';
                 statusBadge.textContent = '处理失败';
+                if (progressText) {
+                    progressText.textContent = `错误: ${fileData.error || '未知错误'}`;
+                    progressText.style.color = '#ef4444'; // 红色错误文本
+                }
                 break;
         }
     }
@@ -502,59 +776,7 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// 生成处理结果
-function generateProcessingResult(fileData) {
-    // 模拟从文本文件中提取的实体和关系
-    const mockEntities = [
-        { name: '中华人民共和国', type: '国家', confidence: 0.95 },
-        { name: '刑法', type: '法律', confidence: 0.98 },
-        { name: '犯罪', type: '概念', confidence: 0.87 },
-        { name: '刑罚', type: '概念', confidence: 0.89 },
-        { name: '故意犯罪', type: '罪名', confidence: 0.92 },
-        { name: '过失犯罪', type: '罪名', confidence: 0.90 }
-    ];
-    
-    const mockRelationships = [
-        { from: '中华人民共和国', to: '刑法', type: '制定', confidence: 0.96 },
-        { from: '刑法', to: '犯罪', type: '规范', confidence: 0.94 },
-        { from: '刑法', to: '刑罚', type: '规定', confidence: 0.93 },
-        { from: '犯罪', to: '故意犯罪', type: '包含', confidence: 0.88 },
-        { from: '犯罪', to: '过失犯罪', type: '包含', confidence: 0.87 }
-    ];
-    
-    // 模拟OCR识别结果
-    const mockOCRResult = {
-        text: `中华人民共和国刑法是规定犯罪和刑罚的法律，是国家的基本法律之一。
-刑法分为总则和分则两部分，总则规定了犯罪的一般原理和刑罚的一般原则，
-分则规定了各种具体犯罪的构成要件和法定刑。
-故意犯罪是指明知自己的行为会发生危害社会的结果，并且希望或者放任这种结果发生的犯罪。
-过失犯罪是指应当预见自己的行为可能发生危害社会的结果，因为疏忽大意而没有预见，
-或者已经预见而轻信能够避免，以致发生这种结果的犯罪。`,
-        confidence: 0.94,
-        pages: 1,
-        characters: 325,
-        lines: 8
-    };
-    
-    return {
-        fileName: fileData.name,
-        fileSize: fileData.size,
-        processingTime: Math.floor(Math.random() * 30) + 10, // 10-40秒
-        entities: mockEntities,
-        relationships: mockRelationships,
-        ocrResult: mockOCRResult,
-        summary: `成功从《${fileData.name}》中提取了${mockEntities.length}个实体和${mockRelationships.length}个关系，
-                  构建了基础的法律知识图谱结构。处理时间：${Math.floor(Math.random() * 30) + 10}秒。`,
-        processingSteps: [
-            { step: 'OCR识别', status: '完成', duration: '5.3s' },
-            { step: '文本预处理', status: '完成', duration: '2.1s' },
-            { step: '实体识别', status: '完成', duration: '8.5s' },
-            { step: '关系抽取', status: '完成', duration: '5.2s' },
-            { step: '知识融合', status: '完成', duration: '3.8s' },
-            { step: '图谱构建', status: '完成', duration: '4.2s' }
-        ]
-    };
-}
+
 
 // 查看处理结果
 function viewProcessingResult(fileId) {

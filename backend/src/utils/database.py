@@ -5,7 +5,7 @@ import motor.motor_asyncio
 from neo4j import AsyncGraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
-from utils.config import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def init_mongodb():
         # 创建必要的集合和索引
         await _create_mongodb_indices()
         
-        logger.info(f"MongoDB连接成功: {settings.MONGODB_DB_NAME}")
+        logger.info(f"MongoDB连接成功: {settings.MONGO_DB_NAME}")
         return True
     except Exception as e:
         logger.error(f"MongoDB连接失败: {str(e)}")

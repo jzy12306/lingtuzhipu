@@ -258,3 +258,176 @@ class DocumentRepository:
                 "recent_uploads": 0,
                 "by_industry": {}
             }
+    
+    async def get_document_content(self, document_id: str) -> Optional[str]:
+        """
+        根据文档ID获取文档内容
+        
+        Args:
+            document_id: 文档ID
+            
+        Returns:
+            文档内容，如果文档不存在则返回None
+        """
+        try:
+            collection = await self.get_collection()
+            document = await collection.find_one(
+                {"id": document_id}, 
+                {"content": 1}  # 只返回content字段
+            )
+            
+            if document:
+                return document.get("content")
+            return None
+        except Exception as e:
+            self.logger.error(f"获取文档内容失败: {str(e)}")
+            return None
+    
+    async def get_document(self, document_id: str) -> Optional[Document]:
+        """
+        根据文档ID获取完整文档信息
+        
+        Args:
+            document_id: 文档ID
+            
+        Returns:
+            文档对象，如果文档不存在则返回None
+        """
+        try:
+            collection = await self.get_collection()
+            document_data = await collection.find_one({"id": document_id})
+            
+            if document_data:
+                # 移除MongoDB的_id字段
+                if "_id" in document_data:
+                    del document_data["_id"]
+                return Document(**document_data)
+            return None
+        except Exception as e:
+            self.logger.error(f"查找文档失败: {str(e)}")
+            raise
+    
+    async def save_document(self, document: Document) -> Document:
+        """
+        保存文档到数据库
+        
+        Args:
+            document: 文档对象
+            
+        Returns:
+            保存后的文档对象
+        """
+        try:
+            collection = await self.get_collection()
+            document_data = document.dict()
+            
+            # 检查是否已存在
+            existing_doc = await collection.find_one({"id": document.id})
+            
+            if existing_doc:
+                # 更新现有文档
+                await collection.update_one(
+                    {"id": document.id},
+                    {"$set": document_data}
+                )
+            else:
+                # 插入新文档
+                await collection.insert_one(document_data)
+            
+            return document
+        except Exception as e:
+            self.logger.error(f"保存文档失败: {str(e)}")
+            raise
+    
+    async def update_document(self, document_id: str, update_data: Dict[str, Any]) -> Optional[Document]:
+        """
+        更新文档信息
+        
+        Args:
+            document_id: 文档ID
+            update_data: 要更新的数据
+            
+        Returns:
+            更新后的文档对象，如果文档不存在则返回None
+        """
+        try:
+            collection = await self.get_collection()
+            
+            result = await collection.update_one(
+                {"id": document_id},
+                {"$set": update_data}
+            )
+            
+            if result.modified_count > 0:
+                return await self.get_document(document_id)
+            return None
+        except Exception as e:
+            self.logger.error(f"更新文档失败: {str(e)}")
+            raise
+    
+    async def delete_document(self, document_id: str) -> bool:
+        """
+        删除文档
+        
+        Args:
+            document_id: 文档ID
+            
+        Returns:
+            删除是否成功
+        """
+        try:
+            collection = await self.get_collection()
+            result = await collection.delete_one({"id": document_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            self.logger.error(f"删除文档失败: {str(e)}")
+            raise
+    
+    async def advanced_search(
+        self, 
+        query: Any, 
+        skip: int, 
+        limit: int, 
+        user_id: Optional[str] = None
+    ) -> List[Document]:
+        """
+        高级文档搜索
+        
+        Args:
+            query: 搜索查询条件
+            skip: 跳过的文档数
+            limit: 返回的文档数
+            user_id: 用户ID，用于筛选用户自己的文档
+            
+        Returns:
+            搜索结果列表
+        """
+        try:
+            collection = await self.get_collection()
+            filter_criteria = {}
+            
+            if user_id:
+                filter_criteria["user_id"] = user_id
+            
+            # 简单实现，实际项目中需要根据query构建复杂的查询条件
+            if hasattr(query, "title") and query.title:
+                filter_criteria["title"] = {"$regex": query.title, "$options": "i"}
+            
+            if hasattr(query, "document_type") and query.document_type:
+                filter_criteria["type"] = query.document_type
+            
+            if hasattr(query, "status") and query.status:
+                filter_criteria["status"] = query.status
+            
+            cursor = collection.find(filter_criteria).skip(skip).limit(limit)
+            documents = []
+            
+            async for document_data in cursor:
+                if "_id" in document_data:
+                    del document_data["_id"]
+                documents.append(Document(**document_data))
+            
+            return documents
+        except Exception as e:
+            self.logger.error(f"高级搜索文档失败: {str(e)}")
+            raise

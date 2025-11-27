@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     API_BASE: str = "https://api.moonshot.cn/v1"
     MODEL: str = "moonshot-v1-32k"
     
+    # Kimi API配置别名（保持向后兼容）
+    KIMI_API_KEY: str = API_KEY
+    KIMI_BASE_URL: str = API_BASE
+    
+    # 构建者智能体配置
+    BUILDER_AGENT_ENABLED: bool = True
+    
+    # 文档处理限制
+    MAX_ENTITIES_PER_DOCUMENT: int = 1000
+    MAX_RELATIONS_PER_DOCUMENT: int = 2000
+    
     # 向量数据库配置
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: int = 19530
