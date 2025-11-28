@@ -4,6 +4,7 @@ from typing import Optional
 from src.agents.builder.builder_agent import BuilderAgent
 from src.agents.builder.llm_builder_agent import LLMBuilderAgent
 from src.repositories.knowledge_repository import KnowledgeRepository
+from src.repositories.document_repository import DocumentRepository
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def create_builder_agent(knowledge_repository: KnowledgeRepository) -> BuilderAg
         构建者智能体实例
     """
     # 根据配置选择合适的构建者智能体实现
-    if settings.USE_LOCAL_LLM or settings.API_KEY:
+    if settings.LOCAL_LLM_ENABLED or settings.API_KEY:
         logger.info("创建LLM构建者智能体")
         return LLMBuilderAgent(knowledge_repository)
     else:
@@ -35,18 +36,20 @@ class BuilderAgentService:
     
     _instance: Optional['BuilderAgentService'] = None
     
-    def __init__(self, knowledge_repository: KnowledgeRepository):
+    def __init__(self, knowledge_repository: KnowledgeRepository, document_repository: DocumentRepository = None):
         self.knowledge_repository = knowledge_repository
+        self.document_repository = document_repository or DocumentRepository()
         self.builder_agent = create_builder_agent(knowledge_repository)
         logger.info("构建者智能体服务初始化完成")
     
     @classmethod
-    def get_instance(cls, knowledge_repository: Optional[KnowledgeRepository] = None) -> 'BuilderAgentService':
+    def get_instance(cls, knowledge_repository: Optional[KnowledgeRepository] = None, document_repository: Optional[DocumentRepository] = None) -> 'BuilderAgentService':
         """
         获取单例实例
         
         Args:
             knowledge_repository: 知识仓库实例（首次调用时必需）
+            document_repository: 文档仓库实例（可选，默认创建新实例）
             
         Returns:
             构建者智能体服务实例
@@ -57,7 +60,7 @@ class BuilderAgentService:
         if cls._instance is None:
             if knowledge_repository is None:
                 raise ValueError("首次调用必须提供knowledge_repository")
-            cls._instance = cls(knowledge_repository)
+            cls._instance = cls(knowledge_repository, document_repository)
         return cls._instance
     
     async def process_document_by_id(self, document_id: str) -> dict:
@@ -69,12 +72,12 @@ class BuilderAgentService:
             
         Returns:
             处理结果
-            
+        
         Raises:
             ValueError: 如果文档不存在
         """
         # 获取文档
-        document = await self.knowledge_repository.get_document(document_id)
+        document = await self.document_repository.get_document(document_id)
         if not document:
             raise ValueError(f"文档不存在: {document_id}")
         

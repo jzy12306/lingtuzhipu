@@ -9,16 +9,40 @@ window.generateId = function() {
 // Token验证函数
 function validateToken() {
     const token = localStorage.getItem('access_token');
+    console.log('[Token Validate] 开始验证token:', token ? '存在' : '不存在');
+    
     if (!token) {
+        console.log('[Token Validate] token不存在，验证失败');
         return false;
     }
     
     try {
+        // 检查token格式
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
+            console.log('[Token Validate] token格式不正确，验证失败');
+            return false;
+        }
+        
         // 解析token，检查是否过期
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const payload = JSON.parse(atob(tokenParts[1]));
+        console.log('[Token Validate] token payload:', payload);
+        
         const now = Math.floor(Date.now() / 1000);
-        return payload.exp > now;
+        console.log('[Token Validate] 当前时间:', now, '秒');
+        console.log('[Token Validate] token过期时间:', payload.exp, '秒');
+        
+        const isExpired = payload.exp <= now;
+        const expiresIn = payload.exp - now;
+        console.log('[Token Validate] token剩余有效期:', expiresIn, '秒');
+        console.log('[Token Validate] token是否过期:', isExpired ? '是' : '否');
+        
+        // 只有当token确实未过期时才返回true
+        return !isExpired;
     } catch (error) {
+        console.error('[Token Validate] token解析失败:', error);
+        // 解析失败时返回false，因为这意味着token格式确实有问题
+        console.log('[Token Validate] token解析失败，验证失败');
         return false;
     }
 }
@@ -26,30 +50,47 @@ function validateToken() {
 // 检查并刷新token
 async function checkAndRefreshToken() {
     const token = localStorage.getItem('access_token');
+    console.log('[Token Check] 开始检查token:', token ? '存在' : '不存在');
+    
     if (!token) {
+        console.log('[Token Check] token不存在，返回false');
         return false;
     }
     
     try {
-        // 解析token，检查是否即将过期（5分钟内）
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const now = Math.floor(Date.now() / 1000);
-        const expiresIn = payload.exp - now;
-        
-        // 如果token已过期，返回false
-        if (expiresIn <= 0) {
+        // 检查token格式
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
+            console.log('[Token Check] token格式不正确，返回false');
             return false;
         }
         
-        // 如果token即将过期（5分钟内），尝试刷新
-        if (expiresIn < 300) {
-            // 这里可以添加token刷新逻辑
-            // 暂时返回true，后续可以实现
+        // 解析token，检查是否过期
+        const payload = JSON.parse(atob(tokenParts[1]));
+        console.log('[Token Check] token payload:', payload);
+        
+        const now = Math.floor(Date.now() / 1000);
+        console.log('[Token Check] 当前时间:', now, '秒');
+        console.log('[Token Check] token过期时间:', payload.exp, '秒');
+        
+        const expiresIn = payload.exp - now;
+        console.log('[Token Check] token剩余有效期:', expiresIn, '秒');
+        
+        // 只有当token确实已过期时才返回false
+        // 否则让API调用尝试发送请求，由后端决定token是否有效
+        if (expiresIn <= 0) {
+            console.log('[Token Check] token已过期，返回false');
+            return false;
         }
         
+        console.log('[Token Check] token有效，返回true');
         return true;
     } catch (error) {
-        return false;
+        console.error('[Token Check] 检查token失败:', error);
+        // 解析失败时不返回false，让API调用尝试发送请求，由后端决定token是否有效
+        // 这样可以避免前端误判token无效
+        console.log('[Token Check] token解析失败，但仍返回true，由后端验证');
+        return true;
     }
 }
 
@@ -91,8 +132,22 @@ function requireAuth() {
     
     if (protectedPages.includes(pageToCheck)) {
         const token = localStorage.getItem('access_token');
+        console.log('[Auth] 检查认证状态，页面:', pageToCheck, 'token存在:', token ? '是' : '否');
+        
         if (!token) {
+            console.log('[Auth] token不存在，跳转到登录页面');
             // 未登录且访问受保护页面，跳转到登录页面
+            window.location.href = 'login.html';
+            return false;
+        }
+        
+        // 验证token是否有效
+        const isTokenValid = validateToken();
+        console.log('[Auth] token验证结果:', isTokenValid ? '有效' : '无效');
+        
+        if (!isTokenValid) {
+            console.log('[Auth] token无效，跳转到登录页面');
+            // token无效，跳转到登录页面
             window.location.href = 'login.html';
             return false;
         }
@@ -317,25 +372,32 @@ function processUploadQueue() {
 // 使用API处理文件
 async function processFileWithAPI(fileData) {
     try {
+        console.log('开始处理文件:', fileData.name);
+        
         // 1. 上传文件到后端
         const document = await uploadFileToBackend(fileData.file);
         fileData.documentId = document.id;
+        console.log('文件上传成功，documentId:', document.id);
         
         // 2. 调用文档处理API
         await startDocumentProcessing(document.id);
+        console.log('文档处理API调用成功');
         
         // 3. 轮询获取处理结果
         await pollProcessingStatus(fileData, document.id);
+        console.log('文档处理完成');
         
         // 4. 获取最终处理结果
         const processingResult = await getProcessingResult(document.id);
         fileData.processingResult = processingResult;
+        console.log('获取处理结果成功');
         
         // 5. 更新UI状态
         fileData.status = 'completed';
         fileData.progress = 100;
         updateUploadProgress(fileData);
         updateUploadUI(fileData);
+        console.log('文件处理完成，更新UI成功');
         
         // 处理下一个文件
         setTimeout(() => {
@@ -344,14 +406,27 @@ async function processFileWithAPI(fileData) {
     } catch (error) {
         console.error('文件处理失败:', error);
         fileData.status = 'error';
+        
         // 增强错误信息，区分不同类型的错误
         if (error.message.includes('登录已过期')) {
             fileData.error = '登录已过期，请重新登录';
+            // 不自动跳转到登录页，让用户手动处理
         } else if (error.message.includes('无法验证凭据')) {
             fileData.error = '登录已过期，请重新登录';
+            // 不自动跳转到登录页，让用户手动处理
+        } else if (error.message.includes('文件上传失败')) {
+            fileData.error = '文件上传失败，请检查网络连接或文件大小';
+        } else if (error.message.includes('文档处理请求失败')) {
+            fileData.error = '文档处理请求失败，请稍后重试';
+        } else if (error.message.includes('获取文档状态失败')) {
+            fileData.error = '获取文档状态失败，请稍后重试';
+        } else if (error.message.includes('获取处理结果失败')) {
+            fileData.error = '获取处理结果失败，请稍后重试';
         } else {
             fileData.error = error.message || '文件处理失败，请稍后重试';
         }
+        
+        console.log('文件处理失败，错误信息:', fileData.error);
         updateUploadUI(fileData);
         
         // 处理下一个文件
@@ -363,12 +438,13 @@ async function processFileWithAPI(fileData) {
 
 // 上传文件到后端API
 async function uploadFileToBackend(file) {
+    console.log('[API] 开始上传文件到后端API');
+    
     // 检查并刷新token
     const isValid = await checkAndRefreshToken();
     if (!isValid) {
-        localStorage.removeItem('access_token');
-        alert('登录已过期，请重新登录');
-        window.location.href = 'login.html';
+        console.log('[API] token无效，提示用户重新登录');
+        // 不要自动跳转到登录页，让用户手动处理
         throw new Error('登录已过期，请重新登录');
     }
     
@@ -376,100 +452,148 @@ async function uploadFileToBackend(file) {
     formData.append('file', file);
     
     const token = localStorage.getItem('access_token');
+    console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    const response = await fetch('http://localhost:8000/api/documents/', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        },
-        body: formData
-    });
+    const apiUrl = 'http://localhost:8000/api/documents/';
+    console.log('[API] 发送API请求到:', apiUrl);
+    console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // 检查是否是token无效错误
-        if (errorData.detail === '无法验证凭据') {
-            localStorage.removeItem('access_token');
-            alert('登录已过期，请重新登录');
-            window.location.href = 'login.html';
-            throw new Error('登录已过期，请重新登录');
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        console.log('[API] API响应状态:', response.status);
+        console.log('[API] API响应状态文本:', response.statusText);
+        
+        if (!response.ok) {
+            console.log('[API] API响应失败，尝试解析错误信息');
+            const errorData = await response.json().catch(() => ({}));
+            console.log('[API] API错误信息:', errorData);
+            
+            // 检查是否是token无效错误
+            if (errorData.detail === '无法验证凭据') {
+                console.log('[API] token无效，后端返回"无法验证凭据"');
+                // 不要自动跳转到登录页，让用户手动处理
+                throw new Error('登录已过期，请重新登录');
+            }
+            throw new Error(errorData.detail || '文件上传失败');
         }
-        throw new Error(errorData.detail || '文件上传失败');
+        
+        const result = await response.json();
+        console.log('[API] API响应成功，返回数据:', result);
+        
+        return result;
+    } catch (error) {
+        console.error('[API] 上传文件API调用失败:', error);
+        throw error;
     }
-    
-    return await response.json();
 }
 
 // 开始文档处理
 async function startDocumentProcessing(documentId) {
+    console.log('[API] 开始文档处理，documentId:', documentId);
+    
     // 检查并刷新token
     const isValid = await checkAndRefreshToken();
     if (!isValid) {
-        localStorage.removeItem('access_token');
-        alert('登录已过期，请重新登录');
-        window.location.href = 'login.html';
+        console.log('[API] token无效，提示用户重新登录');
+        // 不要自动跳转到登录页，让用户手动处理
         throw new Error('登录已过期，请重新登录');
     }
     
     const token = localStorage.getItem('access_token');
+    console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    const response = await fetch(`http://localhost:8000/api/documents/${documentId}/process/`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        }
-    });
+    const apiUrl = `http://localhost:8000/api/documents/${documentId}/process/`;
+    console.log('[API] 发送API请求到:', apiUrl);
+    console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // 检查是否是token无效错误
-        if (errorData.detail === '无法验证凭据') {
-            localStorage.removeItem('access_token');
-            alert('登录已过期，请重新登录');
-            window.location.href = 'login.html';
-            throw new Error('登录已过期，请重新登录');
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        console.log('[API] API响应状态:', response.status);
+        console.log('[API] API响应状态文本:', response.statusText);
+        
+        if (!response.ok) {
+            console.log('[API] API响应失败，尝试解析错误信息');
+            const errorData = await response.json().catch(() => ({}));
+            console.log('[API] API错误信息:', errorData);
+            
+            // 检查是否是token无效错误
+            if (errorData.detail === '无法验证凭据') {
+                console.log('[API] token无效，后端返回"无法验证凭据"');
+                // 不要自动跳转到登录页，让用户手动处理
+                throw new Error('登录已过期，请重新登录');
+            }
+            throw new Error(errorData.detail || '文档处理请求失败');
         }
-        throw new Error(errorData.detail || '文档处理请求失败');
+        
+        const result = await response.json();
+        console.log('[API] API响应成功，返回数据:', result);
+        
+        return result;
+    } catch (error) {
+        console.error('[API] 开始文档处理API调用失败:', error);
+        throw error;
     }
-    
-    return await response.json();
 }
 
 // 轮询获取处理状态
 async function pollProcessingStatus(fileData, documentId) {
+    console.log('[API] 开始轮询获取处理状态，documentId:', documentId);
     let progress = 0;
     
     return new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
             try {
+                console.log('[API] 轮询中...');
                 // 检查并刷新token
                 const isValid = await checkAndRefreshToken();
                 if (!isValid) {
+                    console.log('[API] token无效，提示用户重新登录');
                     clearInterval(interval);
-                    localStorage.removeItem('access_token');
-                    alert('登录已过期，请重新登录');
-                    window.location.href = 'login.html';
+                    // 不要自动跳转到登录页，让用户手动处理
                     reject(new Error('登录已过期，请重新登录'));
                     return;
                 }
                 
                 const token = localStorage.getItem('access_token');
+                console.log('[API] 获取到token:', token ? '存在' : '不存在');
                 
-                const response = await fetch(`http://localhost:8000/api/documents/${documentId}/`, {
+                const apiUrl = `http://localhost:8000/api/documents/${documentId}/`;
+                console.log('[API] 发送API请求到:', apiUrl);
+                console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
+                
+                const response = await fetch(apiUrl, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
                 
+                console.log('[API] API响应状态:', response.status);
+                console.log('[API] API响应状态文本:', response.statusText);
+                
                 if (!response.ok) {
+                    console.log('[API] API响应失败，尝试解析错误信息');
                     const errorData = await response.json().catch(() => ({}));
+                    console.log('[API] API错误信息:', errorData);
+                    
                     // 检查是否是token无效错误
                     if (errorData.detail === '无法验证凭据') {
+                        console.log('[API] token无效，后端返回"无法验证凭据"');
                         clearInterval(interval);
-                        localStorage.removeItem('access_token');
-                        alert('登录已过期，请重新登录');
-                        window.location.href = 'login.html';
+                        // 不要自动跳转到登录页，让用户手动处理
                         reject(new Error('登录已过期，请重新登录'));
                         return;
                     }
@@ -477,6 +601,7 @@ async function pollProcessingStatus(fileData, documentId) {
                 }
                 
                 const document = await response.json();
+                console.log('[API] 获取到文档状态:', document);
                 
                 // 更新进度（模拟进度增加，实际应从API获取）
                 progress += 5;
@@ -487,13 +612,16 @@ async function pollProcessingStatus(fileData, documentId) {
                 
                 // 检查是否处理完成
                 if (document.status === 'completed') {
+                    console.log('[API] 文档处理完成，停止轮询');
                     clearInterval(interval);
                     resolve();
                 } else if (document.status === 'failed') {
+                    console.log('[API] 文档处理失败，停止轮询');
                     clearInterval(interval);
                     reject(new Error('文档处理失败'));
                 }
             } catch (error) {
+                console.error('[API] 轮询失败:', error);
                 clearInterval(interval);
                 reject(error);
             }
@@ -503,64 +631,81 @@ async function pollProcessingStatus(fileData, documentId) {
 
 // 获取处理结果
 async function getProcessingResult(documentId) {
+    console.log('[API] 开始获取处理结果，documentId:', documentId);
+    
     // 检查并刷新token
     const isValid = await checkAndRefreshToken();
     if (!isValid) {
-        localStorage.removeItem('access_token');
-        alert('登录已过期，请重新登录');
-        window.location.href = 'login.html';
+        console.log('[API] token无效，提示用户重新登录');
+        // 不要自动跳转到登录页，让用户手动处理
         throw new Error('登录已过期，请重新登录');
     }
     
     const token = localStorage.getItem('access_token');
+    console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    // 这里需要根据实际API返回的数据结构进行调整
-    // 目前假设后端返回的结构与模拟数据结构类似
-    const response = await fetch(`http://localhost:8000/api/documents/${documentId}/`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    });
+    const apiUrl = `http://localhost:8000/api/documents/${documentId}/`;
+    console.log('[API] 发送API请求到:', apiUrl);
+    console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        // 检查是否是token无效错误
-        if (errorData.detail === '无法验证凭据') {
-            localStorage.removeItem('access_token');
-            alert('登录已过期，请重新登录');
-            window.location.href = 'login.html';
-            throw new Error('登录已过期，请重新登录');
+    try {
+        // 这里需要根据实际API返回的数据结构进行调整
+        // 目前假设后端返回的结构与模拟数据结构类似
+        const response = await fetch(apiUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        console.log('[API] API响应状态:', response.status);
+        console.log('[API] API响应状态文本:', response.statusText);
+        
+        if (!response.ok) {
+            console.log('[API] API响应失败，尝试解析错误信息');
+            const errorData = await response.json().catch(() => ({}));
+            console.log('[API] API错误信息:', errorData);
+            
+            // 检查是否是token无效错误
+            if (errorData.detail === '无法验证凭据') {
+                console.log('[API] token无效，后端返回"无法验证凭据"');
+                // 不要自动跳转到登录页，让用户手动处理
+                throw new Error('登录已过期，请重新登录');
+            }
+            throw new Error(errorData.detail || '获取处理结果失败');
         }
-        throw new Error(errorData.detail || '获取处理结果失败');
+        
+        const document = await response.json();
+        console.log('[API] API响应成功，返回数据:', document);
+        
+        // 这里需要根据实际API返回的数据结构构建处理结果
+        // 暂时使用模拟数据结构，后续需要根据实际API调整
+        return {
+            fileName: document.title,
+            fileSize: document.size || 0,
+            processingTime: Math.floor(Math.random() * 30) + 10,
+            entities: document.entities || [],
+            relationships: document.relationships || [],
+            ocrResult: document.ocr_result || {
+                text: document.content || '',
+                confidence: 0.95,
+                pages: 1,
+                characters: (document.content || '').length,
+                lines: (document.content || '').split('\n').length
+            },
+            summary: document.summary || `成功从《${document.title}》中提取了知识。`,
+            processingSteps: [
+                { step: 'OCR识别', status: '完成', duration: '5.3s' },
+                { step: '文本预处理', status: '完成', duration: '2.1s' },
+                { step: '实体识别', status: '完成', duration: '8.5s' },
+                { step: '关系抽取', status: '完成', duration: '5.2s' },
+                { step: '知识融合', status: '完成', duration: '3.8s' },
+                { step: '图谱构建', status: '完成', duration: '4.2s' }
+            ]
+        };
+    } catch (error) {
+        console.error('[API] 获取处理结果API调用失败:', error);
+        throw error;
     }
-    
-    const document = await response.json();
-    
-    // 这里需要根据实际API返回的数据结构构建处理结果
-    // 暂时使用模拟数据结构，后续需要根据实际API调整
-    return {
-        fileName: document.title,
-        fileSize: document.size || 0,
-        processingTime: Math.floor(Math.random() * 30) + 10,
-        entities: document.entities || [],
-        relationships: document.relationships || [],
-        ocrResult: document.ocr_result || {
-            text: document.content || '',
-            confidence: 0.95,
-            pages: 1,
-            characters: (document.content || '').length,
-            lines: (document.content || '').split('\n').length
-        },
-        summary: document.summary || `成功从《${document.title}》中提取了知识。`,
-        processingSteps: [
-            { step: 'OCR识别', status: '完成', duration: '5.3s' },
-            { step: '文本预处理', status: '完成', duration: '2.1s' },
-            { step: '实体识别', status: '完成', duration: '8.5s' },
-            { step: '关系抽取', status: '完成', duration: '5.2s' },
-            { step: '知识融合', status: '完成', duration: '3.8s' },
-            { step: '图谱构建', status: '完成', duration: '4.2s' }
-        ]
-    };
 }
 
 // 更新上传进度UI
@@ -612,11 +757,17 @@ function updateUploadUI(fileData) {
                 statusBadge.textContent = '等待中';
                 if (progressText) {
                     progressText.textContent = '准备中...';
+                    progressText.style.color = ''; // 重置颜色
+                    progressText.title = ''; // 重置悬停提示
                 }
                 break;
             case 'processing':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-blue-600 text-blue-100';
                 statusBadge.textContent = '处理中';
+                if (progressText) {
+                    progressText.style.color = ''; // 重置颜色
+                    progressText.title = ''; // 重置悬停提示
+                }
                 break;
             case 'completed':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-green-600 text-green-100';
@@ -625,6 +776,11 @@ function updateUploadUI(fileData) {
                 if (resultActions) {
                     resultActions.classList.remove('hidden');
                 }
+                if (progressText) {
+                    progressText.textContent = '处理完成';
+                    progressText.style.color = '#10b981'; // 绿色成功文本
+                    progressText.title = ''; // 重置悬停提示
+                }
                 break;
             case 'error':
                 statusBadge.className = 'status-badge px-3 py-1 rounded-full text-xs font-medium bg-red-600 text-red-100';
@@ -632,6 +788,7 @@ function updateUploadUI(fileData) {
                 if (progressText) {
                     progressText.textContent = `错误: ${fileData.error || '未知错误'}`;
                     progressText.style.color = '#ef4444'; // 红色错误文本
+                    progressText.title = fileData.error || '未知错误'; // 添加悬停提示
                 }
                 break;
         }

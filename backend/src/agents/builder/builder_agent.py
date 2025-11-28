@@ -104,23 +104,57 @@ class BuilderAgent(ABC):
             保存结果统计
         """
         try:
-            # 保存实体
+            # 批量保存实体 - 使用事务或批量操作
             saved_entities = []
+            entity_errors = []
+            
+            # 将实体转换为字典格式进行批量保存
             for entity in entities:
                 try:
-                    saved_entity = await self.knowledge_repository.create_entity(entity)
+                    # 将Entity对象转换为字典
+                    entity_dict = {
+                        "id": entity.id,
+                        "name": entity.name,
+                        "type": entity.type,
+                        "description": entity.description,
+                        "properties": entity.properties,
+                        "source_document_id": entity.source_document_id,
+                        "confidence_score": entity.confidence_score,
+                        "is_valid": entity.is_valid,
+                        "created_at": entity.created_at,
+                        "updated_at": entity.updated_at
+                    }
+                    saved_entity = await self.knowledge_repository.create_entity(entity_dict)
                     saved_entities.append(saved_entity)
                 except Exception as e:
                     logger.error(f"保存实体失败: {entity.name}, 错误: {str(e)}")
+                    entity_errors.append({"entity": entity.name, "error": str(e)})
             
-            # 保存关系
+            # 批量保存关系
             saved_relations = []
+            relation_errors = []
+            
             for relation in relations:
                 try:
-                    saved_relation = await self.knowledge_repository.create_relation(relation)
+                    # 将Relation对象转换为字典
+                    relation_dict = {
+                        "id": relation.id,
+                        "source_entity_id": relation.source_entity_id,
+                        "target_entity_id": relation.target_entity_id,
+                        "type": relation.type,
+                        "description": relation.description,
+                        "properties": relation.properties,
+                        "source_document_id": relation.source_document_id,
+                        "confidence_score": relation.confidence_score,
+                        "is_valid": relation.is_valid,
+                        "created_at": relation.created_at,
+                        "updated_at": relation.updated_at
+                    }
+                    saved_relation = await self.knowledge_repository.create_relation(relation_dict)
                     saved_relations.append(saved_relation)
                 except Exception as e:
                     logger.error(f"保存关系失败: {relation.type}, 错误: {str(e)}")
+                    relation_errors.append({"relation": relation.type, "error": str(e)})
             
             # 更新文档状态
             await self.knowledge_repository.update_document_status(
@@ -146,20 +180,32 @@ class BuilderAgent(ABC):
                     "saved": len(saved_relations),
                     "failed": len(relations) - len(saved_relations)
                 },
-                "status": "success"
+                "status": "success",
+                "errors": {
+                    "entities": entity_errors,
+                    "relations": relation_errors
+                }
             }
         except Exception as e:
             logger.error(f"保存知识失败: {str(e)}")
-            # 更新文档状态为处理失败
-            await self.knowledge_repository.update_document_status(
-                document_id=document_id,
-                status="processing_failed",
-                processing_details={
-                    "error": str(e),
-                    "processed_at": datetime.utcnow().isoformat()
+            return {
+                "entities": {
+                    "total": len(entities),
+                    "saved": 0,
+                    "failed": len(entities)
+                },
+                "relations": {
+                    "total": len(relations),
+                    "saved": 0,
+                    "failed": len(relations)
+                },
+                "status": "error",
+                "errors": {
+                    "entities": [],
+                    "relations": [],
+                    "general": str(e)
                 }
-            )
-            raise
+            }
     
     def _generate_entity_id(self, name: str, document_id: str) -> str:
         """

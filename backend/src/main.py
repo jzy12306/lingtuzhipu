@@ -19,14 +19,24 @@ from src.middleware.rate_limiter import RateLimitMiddleware
 # 初始化服务工厂实例
 service_factory = ServiceFactory()
 
-# 配置日志
+# 配置日志，将级别设置为WARNING，减少不必要的日志输出
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+# 为应用日志设置INFO级别，确保关键操作仍能被记录
+app_logger = logging.getLogger('src')
+app_logger.setLevel(logging.INFO)
+
+# 将uvicorn的日志级别设置为WARNING，减少框架日志输出
+uvicorn_logger = logging.getLogger('uvicorn')
+uvicorn_logger.setLevel(logging.WARNING)
+uvicorn_access_logger = logging.getLogger('uvicorn.access')
+uvicorn_access_logger.setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

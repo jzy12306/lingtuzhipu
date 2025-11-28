@@ -1,6 +1,7 @@
 """API限流中间件"""
 import time
 import logging
+import json
 from typing import Dict, Any
 from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -148,12 +149,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             ban_remaining = limits["ban_status"].get("ban_remaining", 0)
             
             # 返回429错误
-            raise HTTPException(
+            return Response(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={
+                content=json.dumps({
                     "message": "请求过于频繁，请稍后再试",
                     "retry_after": int(ban_remaining) if ban_remaining > 0 else 60
-                }
+                }),
+                media_type="application/json"
             )
         
         # 继续处理请求
@@ -232,12 +234,13 @@ def rate_limited(route: str = "default"):
                 ban_remaining = limits["ban_status"].get("ban_remaining", 0)
                 
                 # 返回429错误
-                raise HTTPException(
+                return Response(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail={
+                    content=json.dumps({
                         "message": "请求过于频繁，请稍后再试",
                         "retry_after": int(ban_remaining) if ban_remaining > 0 else 60
-                    }
+                    }),
+                    media_type="application/json"
                 )
             
             # 执行原函数

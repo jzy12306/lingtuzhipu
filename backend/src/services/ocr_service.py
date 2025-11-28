@@ -170,10 +170,10 @@ class OCRService:
     
     async def recognize_image_stream(self, image_stream, detect_type: str = "Accurate", lang_type: str = "zh-CHS") -> Dict[str, Any]:
         """
-        识别图片流中的文字
+        识别图片流或字符串中的文字
         
         Args:
-            image_stream: 图片流
+            image_stream: 图片流或字符串内容
             detect_type: 识别类型，默认为"Accurate"
             lang_type: 语言类型，默认为"zh-CHS"
             
@@ -181,10 +181,24 @@ class OCRService:
             OCR识别结果
         """
         try:
-            self.logger.info("开始识别图片流")
+            self.logger.info("开始识别图片内容")
             
-            # 读取图片流并编码为base64
-            image_data = image_stream.read()
+            # 处理不同类型的输入
+            image_data = None
+            if hasattr(image_stream, 'read'):
+                # 如果是文件流对象，直接读取
+                image_data = image_stream.read()
+            else:
+                # 如果是字符串，直接使用
+                if isinstance(image_stream, str):
+                    # 对于字符串，假设是已经提取的文本，直接返回
+                    self.logger.info("图片内容为字符串，直接返回")
+                    return {"regions": [{"lines": [{"words": [{"text": image_stream}]}]}], "content": image_stream}
+                else:
+                    # 其他类型，转换为bytes
+                    image_data = image_stream
+            
+            # 编码为base64
             q = base64.b64encode(image_data).decode('utf-8')
             
             # 构建请求数据
@@ -206,11 +220,70 @@ class OCRService:
             
             # 发送请求
             response = self.do_request(data)
-            self.logger.info("图片流识别完成")
+            self.logger.info("图片内容识别完成")
             
             return response
         except Exception as e:
-            self.logger.error(f"图片流识别失败: {str(e)}")
+            self.logger.error(f"图片内容识别失败: {str(e)}")
+            raise
+    
+    async def recognize_pdf_stream(self, pdf_stream, detect_type: str = "Accurate", lang_type: str = "zh-CHS") -> Dict[str, Any]:
+        """
+        识别PDF文件流或字符串中的文字
+        
+        Args:
+            pdf_stream: PDF文件流或字符串内容
+            detect_type: 识别类型，默认为"Accurate"
+            lang_type: 语言类型，默认为"zh-CHS"
+            
+        Returns:
+            OCR识别结果
+        """
+        try:
+            self.logger.info("开始识别PDF内容")
+            
+            # 处理不同类型的输入
+            pdf_data = None
+            if hasattr(pdf_stream, 'read'):
+                # 如果是文件流对象，直接读取
+                pdf_data = pdf_stream.read()
+            else:
+                # 如果是字符串，直接使用
+                if isinstance(pdf_stream, str):
+                    # 对于字符串，假设是已经提取的文本，直接返回
+                    self.logger.info("PDF内容为字符串，直接返回")
+                    return {"regions": [{"lines": [{"words": [{"text": pdf_stream}]}]}], "content": pdf_stream}
+                else:
+                    # 其他类型，转换为bytes
+                    pdf_data = pdf_stream
+            
+            # 编码为base64
+            q = base64.b64encode(pdf_data).decode('utf-8')
+            
+            # 构建请求数据
+            data = {
+                'detectType': detect_type,
+                'imageType': '1',
+                'langType': lang_type,
+                'img': q,
+                'docType': 'json',
+                'signType': 'v3',
+                'curtime': str(int(time.time())),
+                'salt': str(uuid.uuid1())
+            }
+            
+            # 生成签名
+            sign_str = self.app_key + self.truncate(q) + data['salt'] + data['curtime'] + self.app_secret
+            data['sign'] = self.encrypt(sign_str)
+            data['appKey'] = self.app_key
+            
+            # 发送请求
+            response = self.do_request(data)
+            self.logger.info("PDF内容识别完成")
+            
+            return response
+        except Exception as e:
+            self.logger.error(f"PDF内容识别失败: {str(e)}")
             raise
     
     async def initialize(self) -> bool:

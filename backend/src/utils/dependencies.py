@@ -8,8 +8,9 @@ from src.models.user import User, TokenData
 from src.repositories.user_repository import UserRepository
 
 # 配置
-SECRET_KEY = "your-secret-key-here-change-in-production"
-ALGORITHM = "HS256"
+from src.config.settings import settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -39,7 +40,7 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    user = await user_repo.get_user_by_id(token_data.user_id)
+    user = await user_repo.find_by_id(token_data.user_id)
     if user is None:
         raise credentials_exception
     
@@ -89,25 +90,51 @@ async def get_optional_user(
         return None
 
 
-def validate_document_permission(document: Any, user: User) -> bool:
+async def validate_document_permission(
+    document_id: str,
+    current_user: User = Depends(get_current_active_user),
+    document_repo = None
+) -> Any:
     """
-    验证用户是否有权限访问文档
+    验证用户是否有权限访问文档，并返回文档对象
     
     Args:
-        document: 文档信息
-        user: 用户对象
+        document_id: 文档ID
+        current_user: 当前用户
+        document_repo: 文档仓库实例
         
     Returns:
-        bool: 是否有权限
+        Any: 文档对象
     """
+    # 延迟导入避免循环依赖
+    if document_repo is None:
+        from src.repositories.document_repository import DocumentRepository
+        document_repo = DocumentRepository()
+    
+    # 获取文档
+    document = await document_repo.get_document(document_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在"
+        )
+    
     # 管理员可以访问所有文档
-    if user.is_admin:
-        return True
+    if current_user.is_admin:
+        return document
     
     # 用户只能访问自己创建的文档
     if hasattr(document, "user_id"):
-        return document.user_id == user.id
-    return False
+        if document.user_id == current_user.id:
+            return document
+    elif isinstance(document, dict):
+        if document.get("user_id") == current_user.id:
+            return document
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="无权访问此文档"
+    )
 
 
 async def validate_resource_ownership(

@@ -155,24 +155,33 @@ class UserRepository:
         try:
             collection = await self.get_collection()
             
-            # 先尝试用字符串id查找
+            user_data = None
+            
+            # 先尝试用字符串id查找（适用于内存集合）
             user_data = await collection.find_one({"id": user_id})
             
-            # 如果找不到，尝试用ObjectId查找
+            # 如果找不到，尝试用ObjectId查找（适用于MongoDB）
             if not user_data:
                 try:
                     user_data = await collection.find_one({"_id": ObjectId(user_id)})
                     if user_data:
+                        # 转换MongoDB的_id为id
                         user_data["id"] = str(user_data.pop("_id"))
                 except Exception:
+                    # 对于内存集合，继续尝试其他方式
                     pass
             
+            # 最后尝试用_id字段的字符串形式查找（兼容各种情况）
+            if not user_data:
+                user_data = await collection.find_one({"_id": user_id})
+                if user_data:
+                    # 转换_id为id
+                    if "_id" in user_data:
+                        user_data["id"] = str(user_data["_id"])
+                        del user_data["_id"]
+            
             if user_data:
-                # 转换MongoDB的_id为id
-                if "_id" in user_data:
-                    user_data["id"] = str(user_data["_id"])
-                    del user_data["_id"]
-                # 添加默认字段如果没有
+                # 确保必要字段存在
                 if "created_at" not in user_data:
                     user_data["created_at"] = datetime.utcnow()
                 if "updated_at" not in user_data:
@@ -186,9 +195,11 @@ class UserRepository:
                 if "email_verified" not in user_data:
                     user_data["email_verified"] = False
                 return User(**user_data)
+            
+            self.logger.warning(f"[UserRepository] 未找到用户，ID: {user_id}")
             return None
         except Exception as e:
-            self.logger.error(f"查找用户失败: {str(e)}")
+            self.logger.error(f"[UserRepository] 查找用户失败: {str(e)}")
             raise
     
     async def find_by_email(self, email: str) -> Optional[User]:

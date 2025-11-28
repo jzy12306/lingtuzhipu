@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, List, Optional
 import logging
 
-from src.core.security import get_current_user, get_current_active_user
+from src.utils.dependencies import get_current_user, get_current_active_user
 from src.schemas.user import User
 from src.routes import auth, documents, knowledge, health, analyst
 

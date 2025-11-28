@@ -48,6 +48,11 @@ class RateLimitConfig:
             "register": {
                 "per_minute": int(os.getenv("RATE_LIMIT_REGISTER_PER_MINUTE", "5")),
                 "block_duration": int(os.getenv("RATE_LIMIT_REGISTER_BLOCK_DURATION", "600"))
+            },
+            "documents": {
+                "per_minute": int(os.getenv("RATE_LIMIT_DOCUMENTS_PER_MINUTE", "200")),
+                "per_hour": int(os.getenv("RATE_LIMIT_DOCUMENTS_PER_HOUR", "5000")),
+                "block_duration": int(os.getenv("RATE_LIMIT_DOCUMENTS_BLOCK_DURATION", "300"))
             }
         }
     

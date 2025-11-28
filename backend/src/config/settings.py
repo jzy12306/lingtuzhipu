@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # LLM配置 - 本地LM Studio
-    LOCAL_LLM_ENABLED: bool = True
+    LOCAL_LLM_ENABLED: bool = False
     LOCAL_LLM_URL: str = "http://192.168.56.1:1234"
     LOCAL_LLM_MODEL: str = "qwen2.5-7b-instruct-1m"
     LOCAL_LLM_TIMEOUT: int = 120

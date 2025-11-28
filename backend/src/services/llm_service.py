@@ -63,12 +63,12 @@ class LLMService:
         """生成文本响应"""
         try:
             # 直接调用Kimi API，因为LOCAL_LLM_ENABLED=false
-            self.logger.info(f"调用Kimi API生成文本，prompt: {prompt[:50]}...")
+            self.logger.debug(f"调用Kimi API生成文本，prompt长度: {len(prompt)}")
             return await self._generate_with_kimi(
                 prompt, system_message, max_tokens, temperature
             )
         except Exception as e:
-            self.logger.error(f"LLM生成失败: {str(e)}", exc_info=True)
+            self.logger.error(f"LLM生成失败: {str(e)}")
             # 直接返回错误信息，而不是抛出异常
             return f"调用失败: {str(e)}"
     
@@ -120,8 +120,7 @@ class LLMService:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
         
-        self.logger.info(f"Kimi API请求: model={settings.MODEL}, max_tokens={max_tokens}, temperature={temperature}")
-        self.logger.debug(f"Kimi API请求消息: {json.dumps(messages, ensure_ascii=False)}")
+        self.logger.debug(f"Kimi API请求: model={settings.MODEL}, max_tokens={max_tokens}, temperature={temperature}")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -140,8 +139,7 @@ class LLMService:
                     }
                 )
                 
-                self.logger.info(f"Kimi API响应状态码: {response.status_code}")
-                self.logger.debug(f"Kimi API响应内容: {response.text}")
+                self.logger.debug(f"Kimi API响应状态码: {response.status_code}")
                 
                 response.raise_for_status()
                 result = response.json()

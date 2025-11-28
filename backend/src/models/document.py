@@ -19,6 +19,7 @@ class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"  # 已上传
     PROCESSING = "processing"  # 处理中
     OCR_PROCESSING = "ocr_processing"  # OCR识别中
+    KNOWLEDGE_EXTRACTING = "knowledge_extracting"  # 知识提取中
     PROCESSED = "processed"  # 已处理
     FAILED = "failed"  # 处理失败
 
@@ -38,6 +39,7 @@ class DocumentBase(BaseModel):
 class DocumentCreate(DocumentBase):
     """文档创建模型"""
     content: Optional[str] = Field(None, description="文档内容")
+    file_path: Optional[str] = Field(None, description="文件路径")
 
 
 class DocumentUpdate(BaseModel):
@@ -54,7 +56,7 @@ class DocumentResponse(DocumentBase):
     id: str = Field(..., description="文档ID")
     user_id: str = Field(..., description="上传用户ID")
     status: DocumentStatus = Field(..., description="文档状态")
-    file_path: str = Field(..., description="文件路径")
+    file_path: Optional[str] = Field(None, description="文件路径")
     file_size: int = Field(..., description="文件大小(字节)")
     entities_count: int = Field(default=0, description="提取的实体数量")
     relations_count: int = Field(default=0, description="提取的关系数量")
@@ -63,6 +65,10 @@ class DocumentResponse(DocumentBase):
     processed_at: Optional[datetime] = Field(None, description="处理完成时间")
     processed: bool = False  # 兼容字段
     embedding_status: str = "none"  # 兼容字段
+    ocr_status: Optional[str] = Field(None, description="OCR识别状态")
+    ocr_result: Optional[Dict[str, Any]] = Field(None, description="OCR识别结果")
+    ocr_confidence: Optional[float] = Field(None, description="OCR识别置信度")
+    ocr_error: Optional[str] = Field(None, description="OCR识别错误信息")
     
     class Config:
         from_attributes = True
@@ -75,7 +81,7 @@ class Document(DocumentResponse):
     processing_error: Optional[str] = None  # 处理错误
     embedding_id: Optional[str] = None  # 嵌入ID
     ocr_status: Optional[str] = Field(None, description="OCR识别状态")
-    ocr_result: Optional[str] = Field(None, description="OCR识别结果")
+    ocr_result: Optional[Dict[str, Any]] = Field(None, description="OCR识别结果")
     ocr_confidence: Optional[float] = Field(None, description="OCR识别置信度")
     ocr_error: Optional[str] = Field(None, description="OCR识别错误信息")
     

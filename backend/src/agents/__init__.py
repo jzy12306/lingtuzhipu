@@ -63,7 +63,7 @@ async def initialize_agent_system():
         return False
 
 
-async def process_document_with_workflow(document_content: str) -> dict:
+async def process_document_with_workflow(document_id: str, document_content: str) -> dict:
     """使用工作流处理文档"""
     try:
         # 使用LangGraph工作流

@@ -54,7 +54,8 @@ class KnowledgeGraphQualityEvaluator:
             if entity.type == "Unknown":
                 entity_errors.append(f"实体 {entity.name} 类型未知")
                 is_complete = False
-            if not entity.description or not entity.description.strip():
+            # 检查description属性是否存在
+            if hasattr(entity, 'description') and not entity.description or not entity.description.strip():
                 entity_errors.append(f"实体 {entity.name} 缺少描述")
                 # 描述缺失不影响完整性评分，但会记录警告
             
@@ -107,6 +108,11 @@ class KnowledgeGraphQualityEvaluator:
                 "completeness": 0.0,
                 "accuracy": 0.0,
                 "consistency": 0.0,
+                "total_relations": 0,
+                "complete_relations": 0,
+                "accurate_relations": 0,
+                "consistent_relations": 0,
+                "relation_type_count": 0,
                 "errors": ["没有关系可评估"]
             }
         
@@ -136,12 +142,7 @@ class KnowledgeGraphQualityEvaluator:
             if not relation.target_entity_id:
                 relation_errors.append(f"关系ID {relation.id} 缺少目标实体ID")
                 is_complete = False
-            if not relation.source_entity_name:
-                relation_errors.append(f"关系ID {relation.id} 缺少源实体名称")
-                is_complete = False
-            if not relation.target_entity_name:
-                relation_errors.append(f"关系ID {relation.id} 缺少目标实体名称")
-                is_complete = False
+            # 移除对不存在属性的检查，实体名称不是关系模型的必填字段
             
             if is_complete:
                 complete_relations += 1
@@ -162,7 +163,7 @@ class KnowledgeGraphQualityEvaluator:
             is_consistent = True
             relation_key = f"{relation.source_entity_id}_{relation.target_entity_id}_{relation.type}"
             if relation_key in relation_types:
-                relation_errors.append(f"关系 {relation.source_entity_name} - {relation.type} - {relation.target_entity_name} 重复")
+                relation_errors.append(f"关系 {relation.source_entity_id} - {relation.type} - {relation.target_entity_id} 重复")
                 is_consistent = False
             else:
                 relation_types[relation_key] = 1
@@ -173,10 +174,10 @@ class KnowledgeGraphQualityEvaluator:
             if relation_errors:
                 errors.extend(relation_errors)
         
-        # 计算评分
-        completeness = complete_relations / total_relations
-        accuracy = accurate_relations / total_relations
-        consistency = consistent_relations / total_relations
+        # 计算评分，添加除数检查
+        completeness = complete_relations / total_relations if total_relations > 0 else 0.0
+        accuracy = accurate_relations / total_relations if total_relations > 0 else 0.0
+        consistency = consistent_relations / total_relations if total_relations > 0 else 0.0
         
         return {
             "completeness": completeness,

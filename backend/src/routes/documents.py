@@ -54,13 +54,26 @@ async def create_document(
         # 处理上传的文件
         file_content, file_type = await process_uploaded_file(file)
         
+        # 如果file_type为None，根据文件名推断
+        if not file_type:
+            if file.filename:
+                if file.filename.endswith('.txt'):
+                    file_type = 'txt'
+                elif file.filename.endswith('.pdf'):
+                    file_type = 'pdf'
+                elif file.filename.endswith('.docx'):
+                    file_type = 'docx'
+                else:
+                    file_type = 'txt'  # 默认使用txt
+            else:
+                file_type = 'txt'  # 默认使用txt
+        
         # 创建文档
         document_data = DocumentCreate(
             title=file.filename,
-            description=f"上传的{file_type}文件",
-            type=file_type,
+            document_type=file_type,
             content=file_content,
-            file_name=file.filename,
+            filename=file.filename,
             file_type=file_type
         )
         

@@ -30,13 +30,8 @@ class LLMBuilderAgent(BuilderAgent):
             # 从文档元数据获取行业信息，默认为"通用"
             industry = getattr(document, 'industry', '通用')
             
-            # 更新文档状态为处理中
-            # 注意：这里需要实现文档状态更新逻辑
-            # 由于KnowledgeRepository缺少update_document_status方法，暂时注释
-            # await self.knowledge_repository.update_document_status(
-            #     document_id=document.id,
-            #     status="processing"
-            # )
+            # 记录文档处理的开始时间
+            start_time = datetime.utcnow()
             
             # 步骤1: 提取实体
             entities = await self.extract_entities(
@@ -45,9 +40,11 @@ class LLMBuilderAgent(BuilderAgent):
                 user_id=document.user_id,
                 industry=industry
             )
+            logger.info(f"实体提取完成: {document.id}, 共提取 {len(entities)} 个实体")
             
-            # 步骤2: 丰富实体信息
-            enriched_entities = await self.enrich_entities(entities, industry=industry)
+            # 步骤2: 跳过实体丰富，减少API调用次数
+            enriched_entities = entities.copy()
+            logger.info(f"跳过实体丰富: {document.id}, 实体数: {len(entities)}, 内容长度: {len(document.content)}, 类型: {document.document_type}")
             
             # 步骤3: 提取关系
             relations = await self.extract_relations(
@@ -57,55 +54,39 @@ class LLMBuilderAgent(BuilderAgent):
                 user_id=document.user_id,
                 industry=industry
             )
+            logger.info(f"关系提取完成: {document.id}, 共提取 {len(relations)} 个关系")
             
             # 步骤4: 验证提取结果
             valid_entities, valid_relations, validation_errors = await self.validate_extractions(
                 entities=enriched_entities,
                 relations=relations
             )
+            logger.info(f"验证结果: {document.id}, 有效实体: {len(valid_entities)}, 有效关系: {len(valid_relations)}, 错误数: {len(validation_errors)}")
             
-            # 步骤5: 检查大小限制
-            within_limits, limit_error = await self.check_document_size_limits(
-                entities=valid_entities,
-                relations=valid_relations
-            )
-            
-            if not within_limits:
-                raise Exception(limit_error)
-            
-            # 步骤6: 保存提取的知识
+            # 步骤5: 保存提取的知识
             save_result = await self.save_extracted_knowledge(
                 entities=valid_entities,
                 relations=valid_relations,
                 document_id=document.id
             )
+            logger.info(f"知识保存完成: {document.id}, 实体: {save_result.get('entities', 0)}, 关系: {save_result.get('relations', 0)}")
             
-            # 步骤7: 评估知识图谱质量
-            from src.agents.builder.quality_evaluator import quality_evaluator
-            quality_report = quality_evaluator.evaluate_knowledge_graph(valid_entities, valid_relations)
+            # 计算处理时间
+            processing_time = (datetime.utcnow() - start_time).total_seconds()
             
             result = {
                 **save_result,
                 "validation_errors": validation_errors,
-                "quality_report": quality_report,
-                "processing_time": datetime.utcnow().isoformat()
+                "processing_time": processing_time,
+                "start_time": start_time.isoformat(),
+                "end_time": datetime.utcnow().isoformat()
             }
             
-            logger.info(f"文档处理完成: {document.title}, 结果: {result}")
+            logger.info(f"文档处理完成: {document.title}, 耗时: {processing_time:.2f}秒")
             return result
             
         except Exception as e:
-            logger.error(f"处理文档失败: {document.title}, 错误: {str(e)}")
-            # 更新文档状态为处理失败
-            # 注意：这里需要实现文档状态更新逻辑
-            # await self.knowledge_repository.update_document_status(
-            #     document_id=document.id,
-            #     status="processing_failed",
-            #     processing_details={
-            #         "error": str(e),
-            #         "processed_at": datetime.utcnow().isoformat()
-            #     }
-            # )
+            logger.exception(f"处理文档失败: {document.title} (ID: {document.id}), 错误: {str(e)}")
             raise
     
     async def extract_entities(self, content: str, document_id: str, user_id: str, industry: str = "通用") -> List[Entity]:
@@ -123,15 +104,20 @@ class LLMBuilderAgent(BuilderAgent):
             # 转换为Entity对象
             entities = []
             for entity_data in entities_data:
+                now = datetime.utcnow()
                 entity = Entity(
                     id=self._generate_entity_id(entity_data["name"], document_id),
                     name=entity_data["name"],
                     type=entity_data.get("type", "Unknown"),
                     description=entity_data.get("description", ""),
                     properties=entity_data.get("properties", {}),
+                    source_document_id=document_id,
                     document_id=document_id,
                     user_id=user_id,
-                    created_at=datetime.utcnow()
+                    confidence_score=1.0,
+                    is_valid=True,
+                    created_at=now,
+                    updated_at=now
                 )
                 entities.append(entity)
             
@@ -169,6 +155,7 @@ class LLMBuilderAgent(BuilderAgent):
                 )
                 
                 if source_entity and target_entity:
+                    now = datetime.utcnow()
                     relation = Relation(
                         id=self._generate_relation_id(source_entity.id, target_entity.id, relation_data["type"]),
                         type=relation_data["type"],
@@ -178,9 +165,13 @@ class LLMBuilderAgent(BuilderAgent):
                         target_entity_name=target_entity.name,
                         properties=relation_data.get("properties", {}),
                         description=relation_data.get("description", ""),
+                        source_document_id=document_id,
                         document_id=document_id,
                         user_id=user_id,
-                        created_at=datetime.utcnow()
+                        confidence_score=1.0,
+                        is_valid=True,
+                        created_at=now,
+                        updated_at=now
                     )
                     relations.append(relation)
             
@@ -195,31 +186,77 @@ class LLMBuilderAgent(BuilderAgent):
     async def enrich_entities(self, entities: List[Entity], industry: str = "通用") -> List[Entity]:
         """丰富实体信息"""
         try:
-            # 为每个实体调用LLM获取更多信息
-            enriched_entities = []
-            for entity in entities:
-                try:
-                    prompt = self._prepare_entity_enrichment_prompt(entity, industry)
-                    response = await self._call_llm(prompt)
-                    enrichment_data = self._parse_entity_enrichment(response)
-                    
-                    # 更新实体信息
+            if not entities:
+                return entities
+                
+            # 批量处理实体，将所有实体合并为一次API调用，限制最多处理20个实体
+            max_entities_to_enrich = 20
+            entities_to_enrich = entities[:max_entities_to_enrich]
+            enriched_entities = entities.copy()
+            
+            # 准备批量实体丰富提示词
+            prompt = self._prepare_batch_entity_enrichment_prompt(entities_to_enrich, industry)
+            response = await self._call_llm(prompt)
+            
+            # 解析批量响应
+            enrichment_results = self._parse_batch_entity_enrichment(response, len(entities_to_enrich))
+            
+            # 更新实体信息
+            for i, entity in enumerate(enriched_entities[:max_entities_to_enrich]):
+                if i < len(enrichment_results):
+                    enrichment_data = enrichment_results[i]
                     entity.type = enrichment_data.get("type", entity.type)
                     entity.description = enrichment_data.get("description", entity.description)
                     entity.properties = {**entity.properties, **enrichment_data.get("properties", {})}
-                    
-                    enriched_entities.append(entity)
-                except Exception as e:
-                    logger.warning(f"丰富实体失败: {entity.name}, 错误: {str(e)}")
-                    enriched_entities.append(entity)
             
-            logger.info(f"实体丰富完成，共处理 {len(enriched_entities)} 个实体，行业: {industry}")
+            logger.info(f"实体丰富完成，共处理 {len(entities_to_enrich)} 个实体，行业: {industry}")
             return enriched_entities
             
         except Exception as e:
             logger.error(f"实体丰富失败: {str(e)}")
             # 返回原始实体列表
             return entities
+    
+    def _prepare_batch_entity_enrichment_prompt(self, entities: List[Entity], industry: str = "通用") -> str:
+        """准备批量实体丰富提示词"""
+        # 格式化实体列表
+        entities_str = "\n".join([f"{i+1}. 名称: {entity.name}, 类型: {entity.type}, 描述: {entity.description}" for i, entity in enumerate(entities[:20])])  # 限制实体数量
+        
+        # 获取行业特定的提示词模板
+        template = prompt_template_manager.get_template(industry, "batch_entity_enrichment")
+        
+        if not template:
+            # 如果没有批量模板，使用默认模板
+            template = """请为以下实体提供更详细的类型、描述和相关属性。每个实体的信息请使用JSON格式，包含type、description和properties字段。请返回一个JSON数组，顺序与输入实体列表一致。
+
+实体列表：
+{entities}
+
+输出格式要求：
+[
+  {{"type": "实体类型", "description": "实体描述", "properties": {{"属性1": "值1", "属性2": "值2"}}}},
+  {{"type": "实体类型", "description": "实体描述", "properties": {{"属性1": "值1", "属性2": "值2"}}}}
+]
+"""
+        
+        return template.format(
+            entities=entities_str,
+            industry=industry
+        )
+    
+    def _parse_batch_entity_enrichment(self, response: str, expected_count: int) -> List[Dict]:
+        """解析批量实体丰富响应"""
+        try:
+            # 尝试提取JSON部分
+            json_match = re.search(r'\[.*\]', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                results = json.loads(json_str)
+                return results[:expected_count]  # 确保返回数量与预期一致
+            return []
+        except Exception as e:
+            logger.error(f"解析批量实体丰富响应失败: {str(e)}")
+            return []
     
     async def validate_extractions(self, entities: List[Entity], relations: List[Relation]) -> Tuple[List[Entity], List[Relation], List[Dict]]:
         """验证提取的实体和关系的有效性"""

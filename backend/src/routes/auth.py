@@ -312,6 +312,31 @@ async def logout(
     return {"message": "成功登出"}
 
 
+@router.get("/verify-token")
+async def verify_token(
+    token: str = Depends(oauth2_scheme),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    """验证访问令牌是否有效"""
+    try:
+        current_user = await get_current_user(token, user_repo)
+        return {
+            "valid": True,
+            "user": {
+                "id": str(current_user.id),
+                "username": current_user.username,
+                "email": current_user.email,
+                "is_active": current_user.is_active,
+                "is_admin": current_user.is_admin
+            }
+        }
+    except HTTPException:
+        return {
+            "valid": False,
+            "error": "Token已过期或无效"
+        }
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
