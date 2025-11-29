@@ -31,6 +31,55 @@ class KnowledgeRepository:
         """获取Neo4j驱动"""
         return db_service.get_neo4j_driver()
     
+    async def create_neo4j_indexes(self):
+        """创建Neo4j索引"""
+        try:
+            self.logger.info("开始创建Neo4j索引")
+            
+            neo4j_driver = await self.get_neo4j_driver()
+            if neo4j_driver is not None:
+                async with neo4j_driver.session() as session:
+                    # 创建实体ID索引
+                    await session.run("CREATE INDEX entity_id_idx IF NOT EXISTS FOR (e:Entity) ON (e.id)")
+                    self.logger.info("创建实体ID索引成功")
+                    
+                    # 创建实体名称索引
+                    await session.run("CREATE INDEX entity_name_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)")
+                    self.logger.info("创建实体名称索引成功")
+                    
+                    # 创建实体类型索引
+                    await session.run("CREATE INDEX entity_type_idx IF NOT EXISTS FOR (e:Entity) ON (e.type)")
+                    self.logger.info("创建实体类型索引成功")
+                    
+                    # 创建实体来源文档ID索引
+                    await session.run("CREATE INDEX entity_source_doc_idx IF NOT EXISTS FOR (e:Entity) ON (e.source_document_id)")
+                    self.logger.info("创建实体来源文档ID索引成功")
+                    
+                    # 创建关系ID索引
+                    await session.run("CREATE INDEX relation_id_idx IF NOT EXISTS FOR ()-[r:RELATION]-() ON (r.id)")
+                    self.logger.info("创建关系ID索引成功")
+                    
+                    # 创建关系类型索引
+                    await session.run("CREATE INDEX relation_type_idx IF NOT EXISTS FOR ()-[r:RELATION]-() ON (r.type)")
+                    self.logger.info("创建关系类型索引成功")
+                    
+                    # 创建关系来源文档ID索引
+                    await session.run("CREATE INDEX relation_source_doc_idx IF NOT EXISTS FOR ()-[r:RELATION]-() ON (r.source_document_id)")
+                    self.logger.info("创建关系来源文档ID索引成功")
+                    
+                    # 创建关系源实体ID索引
+                    await session.run("CREATE INDEX relation_source_entity_idx IF NOT EXISTS FOR ()-[r:RELATION]->() ON (r.source_entity_id)")
+                    self.logger.info("创建关系源实体ID索引成功")
+                    
+                    # 创建关系目标实体ID索引
+                    await session.run("CREATE INDEX relation_target_entity_idx IF NOT EXISTS FOR ()-[r:RELATION]->() ON (r.target_entity_id)")
+                    self.logger.info("创建关系目标实体ID索引成功")
+            
+            self.logger.info("Neo4j索引创建完成")
+        except Exception as e:
+            self.logger.error(f"创建Neo4j索引失败: {str(e)}")
+            # 索引创建失败不影响程序运行，继续执行
+    
     async def create_entity(self, entity_data: Dict[str, Any]) -> Entity:
         """创建实体"""
         try:
@@ -51,84 +100,57 @@ class KnowledgeRepository:
             # 从properties中提取属性
             properties = entity_data.pop("properties", {})
             
-            # 尝试使用Neo4j保存实体
-            try:
-                # 准备Neo4j查询
-                query = """
-                CREATE (e:Entity {
-                    id: $id, 
-                    name: $name, 
-                    type: $type, 
-                    confidence_score: $confidence_score, 
-                    is_valid: $is_valid, 
-                    source_document_id: $source_document_id,
-                    created_at: $created_at, 
-                    updated_at: $updated_at
-                })
-                SET e += $properties
-                RETURN e
-                """
+            # 保存到MongoDB
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                # 将properties合并回entity_data
+                entity_data["properties"] = properties
                 
-                # 执行查询
-                driver = self.get_neo4j_driver()
-                if driver:
-                    async with driver.session() as session:
-                        result = await session.run(
-                            query,
-                            id=entity_data["id"],
-                            name=entity_data["name"],
-                            type=entity_data["type"],
-                            confidence_score=entity_data["confidence_score"],
-                            is_valid=entity_data["is_valid"],
-                            source_document_id=entity_data["source_document_id"],
-                            created_at=entity_data["created_at"].isoformat(),
-                            updated_at=entity_data["updated_at"].isoformat(),
-                            properties=properties
-                        )
-                        
-                        record = await result.single()
-                        if record:
-                            # 重建实体数据
-                            entity_node = record["e"]
-                            entity_dict = {
-                                "id": entity_node["id"],
-                                "name": entity_node["name"],
-                                "type": entity_node["type"],
-                                "confidence_score": entity_node["confidence_score"],
-                                "is_valid": entity_node["is_valid"],
-                                "source_document_id": entity_node["source_document_id"],
-                                "created_at": datetime.fromisoformat(entity_node["created_at"]),
-                                "updated_at": datetime.fromisoformat(entity_node["updated_at"]),
-                                "properties": {}
-                            }
-                            
-                            # 添加额外属性
-                            for key, value in entity_node.items():
-                                if key not in entity_dict:
-                                    entity_dict["properties"][key] = value
-                            
-                            return Entity(**entity_dict)
-            except Exception as neo4j_error:
-                self.logger.warning(f"Neo4j保存实体失败，尝试使用MongoDB: {str(neo4j_error)}")
+                # 保存到MongoDB
+                entities_collection = mongodb.entities
+                await entities_collection.insert_one(entity_data)
             
-            # 如果Neo4j保存失败，使用MongoDB保存
+            # 保存到Neo4j
             try:
-                # 获取MongoDB连接
-                mongodb = await db_service.get_mongodb()
-                if mongodb is not None:
-                    # 将properties合并回entity_data
-                    entity_data["properties"] = properties
-                    
-                    # 保存到MongoDB
-                    entities_collection = mongodb.entities
-                    await entities_collection.insert_one(entity_data)
-                    
-                    # 返回创建的实体
-                    return Entity(**entity_data)
-            except Exception as mongo_error:
-                self.logger.error(f"MongoDB保存实体失败: {str(mongo_error)}")
+                neo4j_driver = await self.get_neo4j_driver()
+                if neo4j_driver is not None:
+                    async with neo4j_driver.session() as session:
+                        # 构建Cypher查询
+                        cypher = """
+                        CREATE (e:Entity {
+                            id: $id,
+                            name: $name,
+                            type: $type,
+                            confidence_score: $confidence_score,
+                            is_valid: $is_valid,
+                            source_document_id: $source_document_id,
+                            created_at: $created_at,
+                            updated_at: $updated_at
+                        })
+                        RETURN e
+                        """
+                        
+                        # 执行Cypher查询
+                        result = await session.run(cypher, {
+                            "id": entity_data["id"],
+                            "name": entity_data["name"],
+                            "type": entity_data["type"],
+                            "confidence_score": entity_data["confidence_score"],
+                            "is_valid": entity_data["is_valid"],
+                            "source_document_id": entity_data.get("source_document_id"),
+                            "created_at": entity_data["created_at"].isoformat(),
+                            "updated_at": entity_data["updated_at"].isoformat()
+                        })
+                        
+                        # 检查结果
+                        record = await result.single()
+                        if not record:
+                            self.logger.warning(f"Neo4j保存实体失败: {entity_data['id']}")
+            except Exception as neo4j_error:
+                self.logger.error(f"Neo4j保存实体失败: {str(neo4j_error)}")
             
-            raise ValueError("创建实体失败，所有保存方式都失败了")
+            # 返回创建的实体
+            return Entity(**entity_data)
         except Exception as e:
             self.logger.error(f"创建实体失败: {str(e)}")
             raise
@@ -156,90 +178,60 @@ class KnowledgeRepository:
             # 从properties中提取属性
             properties = relation_data.pop("properties", {})
             
-            # 尝试使用Neo4j保存关系
-            try:
-                # 准备Neo4j查询
-                query = """
-                MATCH (s:Entity {id: $source_entity_id})
-                MATCH (t:Entity {id: $target_entity_id})
-                CREATE (s)-[r:RELATION {
-                    id: $id, 
-                    type: $type, 
-                    confidence_score: $confidence_score,
-                    is_valid: $is_valid,
-                    source_document_id: $source_document_id,
-                    created_at: $created_at,
-                    updated_at: $updated_at,
-                    description: $description
-                }]->(t)
-                SET r += $properties
-                RETURN r
-                """
+            # 保存到MongoDB
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                # 将properties合并回relation_data
+                relation_data["properties"] = properties
                 
-                # 执行查询
-                driver = self.get_neo4j_driver()
-                if driver:
-                    async with driver.session() as session:
-                        result = await session.run(
-                            query,
-                            source_entity_id=relation_data["source_entity_id"],
-                            target_entity_id=relation_data["target_entity_id"],
-                            id=relation_data["id"],
-                            type=relation_data["type"],
-                            confidence_score=relation_data["confidence_score"],
-                            is_valid=relation_data["is_valid"],
-                            source_document_id=relation_data["source_document_id"],
-                            created_at=relation_data["created_at"].isoformat(),
-                            updated_at=relation_data["updated_at"].isoformat(),
-                            description=relation_data["description"],
-                            properties=properties
-                        )
-                        
-                        record = await result.single()
-                        if record:
-                            # 重建关系数据
-                            relation_edge = record["r"]
-                            relation_dict = {
-                                "id": relation_edge["id"],
-                                "source_entity_id": relation_data["source_entity_id"],
-                                "target_entity_id": relation_data["target_entity_id"],
-                                "type": relation_edge["type"],
-                                "confidence_score": relation_edge["confidence_score"],
-                                "is_valid": relation_edge["is_valid"],
-                                "source_document_id": relation_edge["source_document_id"],
-                                "created_at": datetime.fromisoformat(relation_edge["created_at"]),
-                                "updated_at": datetime.fromisoformat(relation_edge["updated_at"]),
-                                "description": relation_edge.get("description", ""),
-                                "properties": {}
-                            }
-                            
-                            # 添加额外属性
-                            for key, value in relation_edge.items():
-                                if key not in relation_dict:
-                                    relation_dict["properties"][key] = value
-                            
-                            return Relation(**relation_dict)
-            except Exception as neo4j_error:
-                self.logger.warning(f"Neo4j保存关系失败，尝试使用MongoDB: {str(neo4j_error)}")
+                # 保存到MongoDB
+                relations_collection = mongodb.relations
+                await relations_collection.insert_one(relation_data)
             
-            # 如果Neo4j保存失败，使用MongoDB保存
+            # 保存到Neo4j
             try:
-                # 获取MongoDB连接
-                mongodb = await db_service.get_mongodb()
-                if mongodb is not None:
-                    # 将properties合并回relation_data
-                    relation_data["properties"] = properties
-                    
-                    # 保存到MongoDB
-                    relations_collection = mongodb.relations
-                    await relations_collection.insert_one(relation_data)
-                    
-                    # 返回创建的关系
-                    return Relation(**relation_data)
-            except Exception as mongo_error:
-                self.logger.error(f"MongoDB保存关系失败: {str(mongo_error)}")
+                neo4j_driver = await self.get_neo4j_driver()
+                if neo4j_driver is not None:
+                    async with neo4j_driver.session() as session:
+                        # 构建Cypher查询
+                        cypher = """
+                        MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id})
+                        CREATE (source)-[r:RELATION {
+                            id: $id,
+                            type: $type,
+                            confidence_score: $confidence_score,
+                            is_valid: $is_valid,
+                            source_document_id: $source_document_id,
+                            created_at: $created_at,
+                            updated_at: $updated_at,
+                            description: $description
+                        }]->(target)
+                        RETURN r
+                        """
+                        
+                        # 执行Cypher查询
+                        result = await session.run(cypher, {
+                            "id": relation_data["id"],
+                            "source_id": relation_data["source_entity_id"],
+                            "target_id": relation_data["target_entity_id"],
+                            "type": relation_data["type"],
+                            "confidence_score": relation_data["confidence_score"],
+                            "is_valid": relation_data["is_valid"],
+                            "source_document_id": relation_data.get("source_document_id"),
+                            "created_at": relation_data["created_at"].isoformat(),
+                            "updated_at": relation_data["updated_at"].isoformat(),
+                            "description": relation_data["description"]
+                        })
+                        
+                        # 检查结果
+                        record = await result.single()
+                        if not record:
+                            self.logger.warning(f"Neo4j保存关系失败: {relation_data['id']}")
+            except Exception as neo4j_error:
+                self.logger.error(f"Neo4j保存关系失败: {str(neo4j_error)}")
             
-            raise ValueError("创建关系失败，所有保存方式都失败了")
+            # 返回创建的关系
+            return Relation(**relation_data)
         except Exception as e:
             self.logger.error(f"创建关系失败: {str(e)}")
             raise
@@ -247,6 +239,15 @@ class KnowledgeRepository:
     async def find_entity_by_id(self, entity_id: str) -> Optional[Entity]:
         """根据ID查找实体"""
         try:
+            # 先从MongoDB查找
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                entities_collection = mongodb.entities
+                entity_doc = await entities_collection.find_one({"id": entity_id})
+                if entity_doc:
+                    return Entity(**entity_doc)
+            
+            # 如果MongoDB中找不到，再从Neo4j查找
             query = """
             MATCH (e:Entity {id: $id})
             RETURN e
@@ -286,6 +287,15 @@ class KnowledgeRepository:
     async def find_relation_by_id(self, relation_id: str) -> Optional[Relation]:
         """根据ID查找关系"""
         try:
+            # 先从MongoDB查找
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                relations_collection = mongodb.relations
+                relation_doc = await relations_collection.find_one({"id": relation_id})
+                if relation_doc:
+                    return Relation(**relation_doc)
+            
+            # 如果MongoDB中找不到，再从Neo4j查找
             query = """
             MATCH ()-[r:RELATION {id: $id}]->()
             RETURN r, startNode(r).id as source_id, endNode(r).id as target_id
@@ -326,6 +336,16 @@ class KnowledgeRepository:
     async def find_entities_by_document(self, document_id: str) -> List[Entity]:
         """查找文档中的所有实体"""
         try:
+            # 先从MongoDB查找
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                entities_collection = mongodb.entities
+                cursor = entities_collection.find({"source_document_id": document_id})
+                entities = [Entity(**doc) async for doc in cursor]
+                if entities:
+                    return entities
+            
+            # 如果MongoDB中找不到，再从Neo4j查找
             query = """
             MATCH (e:Entity {source_document_id: $document_id})
             RETURN e
@@ -408,6 +428,16 @@ class KnowledgeRepository:
     async def find_relations_by_document(self, document_id: str) -> List[Relation]:
         """查找文档中的所有关系"""
         try:
+            # 先从MongoDB查找
+            mongodb = await db_service.get_mongodb()
+            if mongodb is not None:
+                relations_collection = mongodb.relations
+                cursor = relations_collection.find({"source_document_id": document_id})
+                relations = [Relation(**doc) async for doc in cursor]
+                if relations:
+                    return relations
+            
+            # 如果MongoDB中找不到，再从Neo4j查找
             query = """
             MATCH ()-[r:RELATION {source_document_id: $document_id}]->()
             RETURN r, startNode(r).id as source_id, endNode(r).id as target_id
@@ -672,6 +702,144 @@ class KnowledgeRepository:
         except Exception as e:
             self.logger.error(f"查找实体路径失败: {str(e)}")
             raise
+    
+    async def find_shortest_path(self, source_id: str, target_id: str, max_depth: int = 5) -> Optional[Dict[str, Any]]:
+        """查找两个实体之间的最短路径"""
+        try:
+            self.logger.info(f"查找最短路径: {source_id} -> {target_id}, 最大深度: {max_depth}")
+            
+            neo4j_driver = await self.get_neo4j_driver()
+            if neo4j_driver is None:
+                return None
+            
+            async with neo4j_driver.session() as session:
+                # 使用Dijkstra算法查找最短路径
+                result = await session.run(
+                    """
+                    MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id})
+                    CALL gds.shortestPath.dijkstra.stream('entity_relation_graph', {
+                        sourceNode: source,
+                        targetNode: target,
+                        relationshipWeightProperty: 'confidence_score'
+                    })
+                    YIELD path
+                    RETURN path
+                    LIMIT 1
+                    """,
+                    source_id=source_id,
+                    target_id=target_id
+                )
+                
+                path_record = await result.single()
+                if not path_record:
+                    return None
+                
+                path = path_record["path"]
+                
+                # 构建路径结果
+                path_result = {
+                    "source_id": source_id,
+                    "target_id": target_id,
+                    "nodes": [],
+                    "relationships": [],
+                    "path": []
+                }
+                
+                # 提取节点信息
+                for node in path.nodes:
+                    path_result["nodes"].append({
+                        "id": node["id"],
+                        "name": node["name"],
+                        "type": node["type"]
+                    })
+                
+                # 提取关系信息
+                for rel in path.relationships:
+                    path_result["relationships"].append({
+                        "id": rel["id"] if "id" in rel else str(uuid.uuid4()),
+                        "type": rel.type,
+                        "source_id": rel.start_node["id"],
+                        "target_id": rel.end_node["id"],
+                        "confidence_score": rel["confidence_score"] if "confidence_score" in rel else 1.0
+                    })
+                    
+                    # 构建路径序列
+                    path_result["path"].append({
+                        "source_id": rel.start_node["id"],
+                        "target_id": rel.end_node["id"],
+                        "relation_type": rel.type
+                    })
+                
+                return path_result
+        except Exception as e:
+            self.logger.error(f"查找最短路径失败: {str(e)}")
+            return None
+    
+    async def detect_communities(self, algorithm: str = "louvain", weight_property: str = "confidence_score") -> Dict[str, Any]:
+        """检测社区"""
+        try:
+            self.logger.info(f"使用{algorithm}算法检测社区")
+            
+            neo4j_driver = await self.get_neo4j_driver()
+            if neo4j_driver is None:
+                return None
+            
+            async with neo4j_driver.session() as session:
+                # 创建图投影
+                await session.run(
+                    '''CALL gds.graph.project('entity_relation_graph', 'Entity', 'RELATION', {
+                        relationshipProperties: $weight_property
+                    })''',
+                    weight_property=weight_property
+                )
+                
+                # 运行社区检测算法
+                if algorithm.lower() == "louvain":
+                    result = await session.run(
+                        """
+                        CALL gds.louvain.stream('entity_relation_graph', {
+                            relationshipWeightProperty: $weight_property
+                        })
+                        YIELD nodeId, communityId
+                        MATCH (n) WHERE id(n) = nodeId
+                        RETURN n.id AS entity_id, communityId AS community_id
+                        """,
+                        weight_property=weight_property
+                    )
+                elif algorithm.lower() == "leiden":
+                    result = await session.run(
+                        """
+                        CALL gds.leiden.stream('entity_relation_graph', {
+                            relationshipWeightProperty: $weight_property
+                        })
+                        YIELD nodeId, communityId
+                        MATCH (n) WHERE id(n) = nodeId
+                        RETURN n.id AS entity_id, communityId AS community_id
+                        """,
+                        weight_property=weight_property
+                    )
+                else:
+                    self.logger.error(f"不支持的社区检测算法: {algorithm}")
+                    return None
+                
+                # 处理结果
+                communities = {}
+                async for record in result:
+                    entity_id = record["entity_id"]
+                    community_id = record["community_id"]
+                    
+                    if community_id not in communities:
+                        communities[community_id] = []
+                    communities[community_id].append(entity_id)
+                
+                return {
+                    "algorithm": algorithm,
+                    "communities": communities,
+                    "community_count": len(communities)
+                }
+        except Exception as e:
+            self.logger.error(f"社区检测失败: {str(e)}")
+            return None
     
     async def get_visualization_data(self, query: Optional[KnowledgeGraphQueryAdvanced] = None) -> GraphVisualization:
         """获取知识图谱可视化数据"""

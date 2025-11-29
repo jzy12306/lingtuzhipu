@@ -168,6 +168,15 @@ class DatabaseService:
                 # 复合索引
                 await self.mongo_db.documents.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
                 
+                # 验证码集合索引
+                await self.mongo_db.verification_codes.create_index([("email", 1), ("purpose", 1)])
+                await self.mongo_db.verification_codes.create_index([("expires_at", 1)], expireAfterSeconds=0)  # TTL索引
+                await self.mongo_db.verification_codes.create_index([("created_at", 1)])
+                
+                # 登录尝试集合索引
+                await self.mongo_db.login_attempts.create_index([("email", 1), ("created_at", 1)])
+                await self.mongo_db.login_attempts.create_index([("created_at", 1)])
+                
                 self.logger.info("MongoDB索引创建成功")
                 
         except Exception as e:

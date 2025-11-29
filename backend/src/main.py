@@ -1,10 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import os
 import uvicorn
 import sys
+import time
+from datetime import datetime
 from dotenv import load_dotenv
 
 # 加载.env文件
@@ -126,6 +129,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# API调用统计中间件
+@app.middleware("http")
+async def api_stats_middleware(request: Request, call_next):
+    """API调用统计中间件"""
+    # 记录请求开始时间
+    start_time = time.time()
+    
+    # 获取请求信息
+    path = request.url.path
+    method = request.method
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # 执行请求
+    response = await call_next(request)
+    
+    # 计算处理时间
+    process_time = time.time() - start_time
+    
+    # 获取响应状态码
+    status_code = response.status_code
+    
+    # 记录API调用统计
+    try:
+        # 构建统计数据
+        stats_data = {
+            "path": path,
+            "method": method,
+            "status_code": status_code,
+            "process_time": process_time,
+            "client_ip": client_ip,
+            "timestamp": datetime.utcnow(),
+            "date": datetime.utcnow().date()
+        }
+        
+        # 保存到MongoDB
+        mongodb = await service_factory.db_service.get_mongodb()
+        if mongodb is not None:
+            await mongodb.api_stats.insert_one(stats_data)
+        
+        # 记录日志
+        logger.info(f"API调用: {method} {path} {status_code} {process_time:.3f}s {client_ip}")
+        
+        # 添加处理时间到响应头
+        response.headers["X-Process-Time"] = str(process_time)
+        
+    except Exception as e:
+        logger.error(f"记录API统计失败: {str(e)}")
+    
+    return response
+
 # 添加速率限制中间件
 app.add_middleware(RateLimitMiddleware)
 
@@ -162,6 +215,79 @@ async def health_check():
         "status": "healthy" if db_status.get("healthy") else "unhealthy",
         "database": db_status
     }
+
+@app.get("/api/stats")
+async def get_api_stats(start_date: datetime = None, end_date: datetime = None, path: str = None):
+    """获取API调用统计"""
+    try:
+        mongodb = await service_factory.db_service.get_mongodb()
+        if mongodb is None:
+            return {"success": False, "error": "数据库连接失败"}
+        
+        # 构建查询条件
+        query = {}
+        if start_date:
+            query["timestamp"] = {"$gte": start_date}
+        if end_date:
+            if "timestamp" not in query:
+                query["timestamp"] = {}
+            query["timestamp"]["$lte"] = end_date
+        if path:
+            query["path"] = path
+        
+        # 统计总调用次数
+        total_calls = await mongodb.api_stats.count_documents(query)
+        
+        # 按路径统计
+        path_stats = []
+        async for stat in mongodb.api_stats.aggregate([
+            {"$match": query},
+            {"$group": {
+                "_id": "$path",
+                "count": {"$sum": 1},
+                "avg_process_time": {"$avg": "$process_time"},
+                "max_process_time": {"$max": "$process_time"},
+                "min_process_time": {"$min": "$process_time"}
+            }},
+            {"$sort": {"count": -1}}
+        ]):
+            path_stats.append({
+                "path": stat["_id"],
+                "count": stat["count"],
+                "avg_process_time": stat["avg_process_time"],
+                "max_process_time": stat["max_process_time"],
+                "min_process_time": stat["min_process_time"]
+            })
+        
+        # 按状态码统计
+        status_stats = []
+        async for stat in mongodb.api_stats.aggregate([
+            {"$match": query},
+            {"$group": {
+                "_id": "$status_code",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}}
+        ]):
+            status_stats.append({
+                "status_code": stat["_id"],
+                "count": stat["count"]
+            })
+        
+        return {
+            "success": True,
+            "total_calls": total_calls,
+            "path_stats": path_stats,
+            "status_stats": status_stats,
+            "start_date": start_date,
+            "end_date": end_date
+        }
+    except Exception as e:
+        logger.error(f"获取API统计失败: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":

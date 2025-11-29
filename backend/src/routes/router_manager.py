@@ -4,7 +4,7 @@ import logging
 
 from src.utils.dependencies import get_current_user, get_current_active_user
 from src.schemas.user import User
-from src.routes import auth, documents, knowledge, health, analyst
+from src.routes import auth, documents, knowledge, health, analyst, approval
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class RouterManager:
         self.knowledge_router = APIRouter(prefix="/knowledge", tags=["knowledge"])
         self.health_router = APIRouter(prefix="/health", tags=["health"])
         self.analyst_router = APIRouter(prefix="/analyst", tags=["analyst"])
+        self.approval_router = APIRouter(prefix="/approval", tags=["approval"])
     
     def register_all_routes(self):
         """注册所有路由"""
@@ -34,6 +35,7 @@ class RouterManager:
             self._register_knowledge_routes()
             self._register_health_routes()
             self._register_analyst_routes()
+            self._register_approval_routes()
             
             logger.info("所有API路由注册完成")
             
@@ -118,6 +120,21 @@ class RouterManager:
             
         except Exception as e:
             logger.error(f"分析师路由注册失败: {str(e)}")
+            raise
+    
+    def _register_approval_routes(self):
+        """注册审批相关路由"""
+        try:
+            # 直接注册approval模块的路由（approval.router已经包含了/api/approval前缀）
+            self.main_router.include_router(
+                approval.router,
+                dependencies=[Depends(get_current_active_user)]
+            )
+            
+            logger.info("审批路由注册完成")
+            
+        except Exception as e:
+            logger.error(f"审批路由注册失败: {str(e)}")
             raise
     
     def get_routes_info(self) -> List[Dict[str, any]]:

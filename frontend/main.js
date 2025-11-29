@@ -553,9 +553,21 @@ async function startDocumentProcessing(documentId) {
 async function pollProcessingStatus(fileData, documentId) {
     console.log('[API] 开始轮询获取处理状态，documentId:', documentId);
     let progress = 0;
+    let pollCount = 0;
+    const maxPolls = 150; // 最多轮询150次(5分钟)
     
     return new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
+            pollCount++;
+            console.log(`[API] 轮询第 ${pollCount} 次，最多 ${maxPolls} 次`);
+            
+            // 超时检查
+            if (pollCount > maxPolls) {
+                console.error('[API] 轮询超时，已达到最大轮询次数');
+                clearInterval(interval);
+                reject(new Error('文档处理超时，请稍后查看处理结果'));
+                return;
+            }
             try {
                 console.log('[API] 轮询中...');
                 // 检查并刷新token
@@ -602,23 +614,39 @@ async function pollProcessingStatus(fileData, documentId) {
                 
                 const document = await response.json();
                 console.log('[API] 获取到文档状态:', document);
+                console.log('[API] 文档当前状态:', document.status);
                 
-                // 更新进度（模拟进度增加，实际应从API获取）
-                progress += 5;
-                progress = Math.min(progress, 95); // 保留5%给最终结果获取
+                // 根据文档状态更新进度
+                if (document.status === 'uploaded') {
+                    progress = 10;
+                } else if (document.status === 'ocr_processing') {
+                    progress = 30;
+                } else if (document.status === 'knowledge_extracting') {
+                    progress = 60;
+                } else if (document.status === 'processing') {
+                    progress = 50;
+                } else if (document.status === 'processed' || document.status === 'completed') {
+                    progress = 95;
+                } else {
+                    // 其他状态，缓慢增加进度
+                    progress = Math.min(progress + 3, 90);
+                }
                 
                 fileData.progress = progress;
+                fileData.currentStatus = document.status;
                 updateUploadProgress(fileData);
                 
-                // 检查是否处理完成
-                if (document.status === 'completed') {
-                    console.log('[API] 文档处理完成，停止轮询');
+                // 检查是否处理完成 - 后端使用的状态是'processed'而不是'completed'
+                if (document.status === 'processed' || document.status === 'completed') {
+                    console.log('[API] 文档处理完成，停止轮询，状态:', document.status);
                     clearInterval(interval);
                     resolve();
-                } else if (document.status === 'failed') {
-                    console.log('[API] 文档处理失败，停止轮询');
+                } else if (document.status === 'failed' || document.status === 'timeout') {
+                    console.log('[API] 文档处理失败，停止轮询，状态:', document.status);
                     clearInterval(interval);
-                    reject(new Error('文档处理失败'));
+                    reject(new Error(`文档处理失败: ${document.processing_error || '未知错误'}`));
+                } else {
+                    console.log('[API] 文档处理中，当前状态:', document.status);
                 }
             } catch (error) {
                 console.error('[API] 轮询失败:', error);
@@ -722,16 +750,32 @@ function updateUploadProgress(fileData) {
     }
 
     if (progressText) {
-        if (fileData.progress < 25) {
-            progressText.textContent = '文件上传中...';
-        } else if (fileData.progress < 50) {
-            progressText.textContent = 'OCR识别中...';
-        } else if (fileData.progress < 75) {
-            progressText.textContent = '实体抽取中...';
-        } else if (fileData.progress < 100) {
-            progressText.textContent = '关系构建中...';
+        // 根据实际状态显示进度文本
+        if (fileData.currentStatus) {
+            const statusTextMap = {
+                'uploaded': '文件已上传',
+                'ocr_processing': 'OCR识别中...',
+                'knowledge_extracting': '知识提取中...',
+                'processing': '文档处理中...',
+                'processed': '处理完成',
+                'completed': '处理完成',
+                'failed': '处理失败',
+                'timeout': '处理超时'
+            };
+            progressText.textContent = statusTextMap[fileData.currentStatus] || '处理中...';
         } else {
-            progressText.textContent = '处理完成';
+            // 回退到基于进度的显示
+            if (fileData.progress < 25) {
+                progressText.textContent = '文件上传中...';
+            } else if (fileData.progress < 50) {
+                progressText.textContent = 'OCR识别中...';
+            } else if (fileData.progress < 75) {
+                progressText.textContent = '实体抽取中...';
+            } else if (fileData.progress < 100) {
+                progressText.textContent = '关系构建中...';
+            } else {
+                progressText.textContent = '处理完成';
+            }
         }
     }
 

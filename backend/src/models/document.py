@@ -19,7 +19,6 @@ class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"  # 已上传
     PROCESSING = "processing"  # 处理中
     OCR_PROCESSING = "ocr_processing"  # OCR识别中
-    KNOWLEDGE_EXTRACTING = "knowledge_extracting"  # 知识提取中
     PROCESSED = "processed"  # 已处理
     FAILED = "failed"  # 处理失败
 

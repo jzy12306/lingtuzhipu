@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -11,6 +11,7 @@ from typing import Optional
 from src.models.user import User, UserCreate, UserUpdate, UserResponse, Token, TokenData, UserLogin, VerificationCode
 from src.repositories.user_repository import UserRepository
 from src.services.email_service import email_service
+from src.services.auth_service import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -26,9 +27,6 @@ from src.core.security import verify_password, get_password_hash
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-# 存储验证码的内存缓存（实际项目中应使用Redis等）
-verification_codes = {}
 
 # 开发模式下跳过验证码验证的配置
 SKIP_VERIFICATION_CODE = os.getenv("SKIP_VERIFICATION_CODE", "False").lower() == "true"
@@ -115,21 +113,17 @@ async def get_current_active_user(
 
 
 @router.post("/send-verification-code")
-async def send_verification_code(email: str):
+async def send_verification_code(
+    request: Request,
+    email: str = Body(..., embed=True),
+    purpose: str = Body(default="login", embed=True)
+):
     """发送验证码到邮箱"""
     try:
-        # 生成6位数字验证码
-        code = generate_verification_code(6)
+        ip_address = request.client.host if request.client else "unknown"
+        user_agent = request.headers.get("user-agent", "unknown")
         
-        # 保存验证码及过期时间
-        expires_at = datetime.utcnow() + timedelta(minutes=5)
-        verification_codes[email] = {
-            "code": code,
-            "expires_at": expires_at
-        }
-        
-        # 发送验证码邮件
-        email_service.send_verification_code(email, code, "verification")
+        await auth_service.send_verification_code(email, purpose, ip_address, user_agent)
         
         return {"message": f"验证码已发送到 {email}"}
     except Exception as e:
@@ -247,6 +241,80 @@ async def login(
     )
     
     return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token,
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": UserResponse(**user.dict())
+    }
+
+
+@router.post("/login/mfa-verify")
+async def login_mfa_verify(
+    request: MfaVerifyRequest,
+    temp_token: str,
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    """登录MFA验证"""
+    # 验证临时令牌
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证临时令牌",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(temp_token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_type: Optional[str] = payload.get("type")
+        user_id: Optional[str] = payload.get("sub")
+        
+        if user_id is None or token_type != "mfa":
+            raise credentials_exception
+            
+    except JWTError:
+        raise credentials_exception
+    
+    # 获取用户信息
+    user = await user_repo.find_by_id(user_id)
+    if not user:
+        raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="用户账户已被禁用"
+        )
+    
+    if not user.mfa_enabled or not user.mfa_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MFA尚未启用"
+        )
+    
+    # 验证MFA代码
+    if not auth_service.verify_mfa_code(user.mfa_secret, request.code):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA代码验证失败",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 创建最终的访问令牌和刷新令牌
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    access_token = create_access_token(
+        data={"sub": str(user.id), "username": user.username},
+        expires_delta=access_token_expires
+    )
+    
+    refresh_token = create_refresh_token(
+        data={"sub": str(user.id)},
+        expires_delta=refresh_token_expires
+    )
+    
+    return {
+        "requires_mfa": False,
         "access_token": access_token,
         "token_type": "bearer",
         "refresh_token": refresh_token,

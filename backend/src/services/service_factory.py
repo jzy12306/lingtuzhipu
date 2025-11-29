@@ -9,10 +9,13 @@ from src.services.knowledge_graph_service import KnowledgeGraphService
 from src.services.ocr_service import OCRService
 from src.services.cross_modal_service import CrossModalService
 from src.services.table_extraction_service import TableExtractionService
+from src.services.business_rule_service import BusinessRuleService
 from src.repositories.user_repository import UserRepository
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.repositories.query_history_repository import QueryHistoryRepository
+from src.repositories.business_rule_repository import BusinessRuleRepository
+from src.repositories.business_rule_repository import BusinessRuleRepository
 from src.services.analyst_agent_service import AnalystAgentService
 from src.schemas.user import UserCreate, UserRole
 from src.core.security import get_password_hash
@@ -41,6 +44,8 @@ class ServiceFactory:
             self._document_service: Optional[DocumentService] = None
             self._knowledge_graph_service: Optional[KnowledgeGraphService] = None
             self._analyst_agent: Optional[AnalystAgent] = None
+            self._auditor_agent_service: Optional = None
+            self._extension_agent: Optional = None
             self._ocr_service: Optional[OCRService] = None
             self._cross_modal_service: Optional[CrossModalService] = None
             self._table_extraction_service: Optional[TableExtractionService] = None
@@ -48,6 +53,8 @@ class ServiceFactory:
             self._document_repository: Optional[DocumentRepository] = None
             self._knowledge_repository: Optional[KnowledgeRepository] = None
             self._query_history_repository: Optional[QueryHistoryRepository] = None
+            self._business_rule_repository: Optional[BusinessRuleRepository] = None
+            self._business_rule_repository: Optional[BusinessRuleRepository] = None
     
     @property
     def db_service(self) -> DatabaseService:
@@ -131,6 +138,22 @@ class ServiceFactory:
         return self._query_history_repository
     
     @property
+    def business_rule_repository(self) -> BusinessRuleRepository:
+        """获取业务规则仓库实例"""
+        if self._business_rule_repository is None:
+            self._business_rule_repository = BusinessRuleRepository(self.db_service)
+        return self._business_rule_repository
+    
+    @property
+    def business_rule_service(self) -> BusinessRuleService:
+        """获取业务规则服务实例"""
+        if not hasattr(self, '_business_rule_service'):
+            self._business_rule_service = BusinessRuleService(
+                business_rule_repository=self.business_rule_repository
+            )
+        return self._business_rule_service
+    
+    @property
     def ocr_service(self) -> OCRService:
         """获取OCR服务实例"""
         if self._ocr_service is None:
@@ -152,6 +175,28 @@ class ServiceFactory:
         if self._table_extraction_service is None:
             self._table_extraction_service = TableExtractionService()
         return self._table_extraction_service
+    
+    @property
+    def auditor_agent_service(self):
+        """
+        获取审计智能体服务实例
+        """
+        if self._auditor_agent_service is None:
+            # 使用延迟导入避免循环依赖
+            from src.agents.auditor import AuditorAgentService
+            self._auditor_agent_service = AuditorAgentService.get_instance(self.knowledge_repository)
+        return self._auditor_agent_service
+    
+    @property
+    def extension_agent(self):
+        """
+        获取扩展智能体实例
+        """
+        if self._extension_agent is None:
+            # 使用延迟导入避免循环依赖
+            from src.agents.extension.extension_agent import ExtensionAgent
+            self._extension_agent = ExtensionAgent("extension_1", "Extension Agent")
+        return self._extension_agent
     
     async def initialize_all(self):
         """初始化所有服务"""
@@ -185,6 +230,10 @@ class ServiceFactory:
             # 初始化文档服务
             await self.document_service.initialize()
             logger.info("文档服务初始化完成")
+            
+            # 初始化扩展智能体
+            await self.extension_agent.initialize()
+            logger.info("扩展智能体初始化完成")
             
             logger.info("所有服务初始化完成")
             
@@ -239,11 +288,19 @@ class ServiceFactory:
                 self._db_service = None
                 logger.info("数据库服务已关闭")
             
+            # 关闭扩展智能体
+            if self._extension_agent:
+                await self._extension_agent.shutdown()
+                self._extension_agent = None
+                logger.info("扩展智能体已关闭")
+            
             # 重置其他服务实例
             self._analyst_agent = None
+            self._auditor_agent_service = None
             self._user_repository = None
             self._document_repository = None
             self._query_history_repository = None
+            self._business_rule_repository = None
             
             logger.info("所有服务已关闭")
             

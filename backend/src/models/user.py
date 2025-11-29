@@ -12,6 +12,9 @@ class UserBase(BaseModel):
     is_superuser: bool = Field(default=False, description="是否为超级用户")
     is_admin: bool = Field(default=False, description="是否为管理员")
     email_verified: bool = Field(default=False, description="邮箱是否已验证")
+    mfa_enabled: bool = Field(default=False, description="是否启用多因素认证")
+    mfa_secret: Optional[str] = Field(None, description="多因素认证密钥")
+    mfa_recovery_codes: Optional[list[str]] = Field(None, description="多因素认证恢复码")
 
 
 class UserCreate(UserBase):
@@ -28,6 +31,9 @@ class UserUpdate(BaseModel):
     is_admin: Optional[bool] = None
     is_superuser: Optional[bool] = None
     email_verified: Optional[bool] = None
+    mfa_enabled: Optional[bool] = None
+    mfa_secret: Optional[str] = None
+    mfa_recovery_codes: Optional[list[str]] = None
 
 
 class UserResponse(UserBase):

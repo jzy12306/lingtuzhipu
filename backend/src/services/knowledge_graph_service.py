@@ -21,6 +21,8 @@ class KnowledgeGraphService:
     async def initialize(self):
         """初始化服务"""
         try:
+            # 创建Neo4j索引
+            await self._repository.create_neo4j_indexes()
             self._is_initialized = True
             logger.info("知识图谱服务初始化完成")
         except Exception as e:
@@ -70,6 +72,41 @@ class KnowledgeGraphService:
                 "is_healthy": False,
                 "error": str(e)
             }
+    
+    async def find_shortest_path(self, source_id: str, target_id: str, max_depth: int = 5) -> Optional[Dict[str, Any]]:
+        """查找两个实体之间的最短路径"""
+        try:
+            logger.info(f"查找最短路径: {source_id} -> {target_id}")
+            return await self._repository.find_shortest_path(source_id, target_id, max_depth)
+        except Exception as e:
+            logger.error(f"查找最短路径失败: {str(e)}")
+            return None
+    
+    async def detect_communities(self, algorithm: str = "louvain", weight_property: str = "confidence_score") -> Optional[Dict[str, Any]]:
+        """检测社区"""
+        try:
+            logger.info(f"使用{algorithm}算法检测社区")
+            return await self._repository.detect_communities(algorithm, weight_property)
+        except Exception as e:
+            logger.error(f"检测社区失败: {str(e)}")
+            return None
+    
+    async def find_entity_path(self, source_id: str, target_id: str, max_depth: int = 3) -> Optional[Dict[str, Any]]:
+        """查找两个实体之间的路径"""
+        try:
+            logger.info(f"查找实体路径: {source_id} -> {target_id}")
+            path = await self._repository.find_entity_path(source_id, target_id, max_depth)
+            if path:
+                # 转换为字典格式
+                return {
+                    "entities": [entity.dict() for entity in path.entities],
+                    "relations": [relation.dict() for relation in path.relations],
+                    "path_sequence": path.path_sequence
+                }
+            return None
+        except Exception as e:
+            logger.error(f"查找实体路径失败: {str(e)}")
+            return None
 
 # 创建知识图谱服务实例
 knowledge_graph_service = KnowledgeGraphService()
