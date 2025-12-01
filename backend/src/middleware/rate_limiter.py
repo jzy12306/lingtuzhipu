@@ -28,6 +28,10 @@ class MemoryRateLimiter:
     async def is_allowed(self, client_ip: str, route: str) -> bool:
         """检查是否允许请求"""
         async with self.lock:
+            # 开发环境IP直接允许通过
+            if client_ip in ["127.0.0.1", "localhost", "::1"]:
+                return True
+            
             # 检查是否被封禁
             if await self._is_banned(client_ip, route):
                 return False

@@ -47,6 +47,18 @@ function validateToken() {
     }
 }
 
+// 退出登录功能
+function logout() {
+    console.log('[Logout] 开始执行退出登录');
+    // 清除localStorage中的token
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    console.log('[Logout] 已清除localStorage中的token');
+    // 重定向到登录页面
+    window.location.href = '/login';
+    console.log('[Logout] 已重定向到登录页面');
+}
+
 // 检查并刷新token
 async function checkAndRefreshToken() {
     const token = localStorage.getItem('access_token');

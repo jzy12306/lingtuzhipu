@@ -418,8 +418,29 @@ class UserRepository:
         """删除用户"""
         try:
             collection = await self.get_collection()
+            deleted_count = 0
+            
+            # 先尝试用id字段删除（适用于内存集合）
             result = await collection.delete_one({"id": user_id})
-            return result.deleted_count > 0
+            deleted_count = result.deleted_count
+            
+            # 如果没删除成功，尝试用ObjectId删除（适用于MongoDB）
+            if deleted_count == 0:
+                try:
+                    from bson import ObjectId
+                    result = await collection.delete_one({"_id": ObjectId(user_id)})
+                    deleted_count = result.deleted_count
+                except Exception as e:
+                    # 对于内存集合，继续尝试其他方式
+                    self.logger.warning(f"尝试用ObjectId删除用户失败: {str(e)}")
+                    pass
+            
+            # 最后尝试用_id字段的字符串形式删除（兼容各种情况）
+            if deleted_count == 0:
+                result = await collection.delete_one({"_id": user_id})
+                deleted_count = result.deleted_count
+            
+            return deleted_count > 0
         except Exception as e:
             self.logger.error(f"删除用户失败: {str(e)}")
             raise

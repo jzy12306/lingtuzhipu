@@ -157,12 +157,11 @@ class AuthService:
         """
         self._lazy_import()
         
-        # 1. 检查用户是否存在
+        # 1. 检查用户是否存在（注册流程中用户不存在是正常的）
         user = await self.user_repository.find_by_email(email)
         if not user:
-            self.logger.warning(f"尝试向不存在的邮箱发送验证码: {email}")
-            # 在开发环境中，允许向不存在的邮箱发送验证码
-            # 生产环境中应该返回错误
+            self.logger.debug(f"注册流程，用户不存在是正常的: {email}")
+            # 允许向不存在的邮箱发送验证码，这是正常的注册流程
         
         # 2. 检查发送频率限制
         mongodb = await self.db_service.get_mongodb()

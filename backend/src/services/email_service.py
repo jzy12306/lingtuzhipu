@@ -2,6 +2,7 @@ import smtplib
 import os
 import time
 import ssl
+import traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from threading import Lock
@@ -88,14 +89,19 @@ class EmailService:
         self.config = SMTP_CONFIG
         self._initialized = True
 
-    def _get_smtp_connection(self):
+    def _get_smtp_connection(self, timeout: int = 10, debug: bool = False) -> smtplib.SMTP_SSL:
         """获取SMTP连接 (带连接池)"""
         context = ssl.create_default_context()
-        return smtplib.SMTP_SSL(
+        server = smtplib.SMTP_SSL(
             self.config["server"], 
             self.config["port"], 
-            context=context
+            context=context,
+            timeout=timeout
         )
+        # 设置调试级别
+        if debug:
+            server.set_debuglevel(1)
+        return server
 
     def _check_rate_limit(self, email: str) -> Tuple[bool, float]:
         """检查发送频率限制"""
@@ -124,38 +130,129 @@ class EmailService:
             return True, 0.0
 
     def send_verification_code(self, to_email: str, code: str, purpose: str = "verification") -> bool:
-        """发送验证码"""
+        """
+        发送验证码
+        """
         # 1. 频率检查
         allowed, wait_time = self._check_rate_limit(to_email)
         if not allowed:
             raise Exception(f"请求过于频繁，请{int(wait_time)}秒后再试")
         
+        # 将不支持的purpose映射到默认模板
+        if purpose not in EMAIL_TEMPLATES:
+            purpose = "verification"
+        
         # 2. 构建邮件
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = EMAIL_TEMPLATES[purpose]["subject"].format(code=code)
-        msg["From"] = f"{self.config['sender_name']} <{self.config['sender_email']}>"
+        
+        # 修复：使用正确的RFC2047编码处理中文发件人名称
+        from email.header import Header
+        subject = EMAIL_TEMPLATES[purpose]["subject"].format(code=code)
+        
+        # 邮件头设置
+        msg["Subject"] = Header(subject, "utf-8")
+        msg["From"] = f"{self.config['sender_email']}"
         msg["To"] = to_email
+        msg["Reply-To"] = self.config["sender_email"]
+        msg["Content-Type"] = "multipart/alternative; charset=utf-8"
         
         # HTML和纯文本版本
-        html_part = MIMEText(EMAIL_TEMPLATES[purpose]["html_body"].format(code=code), "html")
-        text_part = MIMEText(f"验证码：{code}（5分钟内有效）", "plain")
+        text_body = f"验证码：{code}（5分钟内有效）"
+        html_body = EMAIL_TEMPLATES[purpose]["html_body"].format(code=code)
+        
+        text_part = MIMEText(text_body, "plain", "utf-8")
+        html_part = MIMEText(html_body, "html", "utf-8")
         
         msg.attach(text_part)
         msg.attach(html_part)
         
-        # 3. 发送邮件
-        try:
-            with self._get_smtp_connection() as server:
+        # 3. 发送邮件（带重试机制）
+        max_retries = 2
+        retry_delay = 2  # 秒
+        
+        for attempt in range(max_retries + 1):
+            server = None
+            try:
+                logger.info(f"尝试第 {attempt + 1}/{max_retries + 1} 次发送邮件到 {to_email}")
+                
+                # 创建SSL上下文
+                context = ssl.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                
+                # 手动创建SMTP连接
+                server = smtplib.SMTP_SSL(
+                    self.config["server"], 
+                    self.config["port"], 
+                    context=context,
+                    timeout=15
+                )
+                server.set_debuglevel(1)
+                
+                # 登录
                 server.login(self.config["sender_email"], self.config["auth_code"])
-                server.sendmail(
+                logger.info(f"第 {attempt + 1} 次登录成功")
+                
+                # 发送邮件
+                send_result = server.sendmail(
                     self.config["sender_email"],
-                    to_email,
+                    [to_email],
                     msg.as_string()
                 )
-            return True
-        except Exception as e:
-            logger.error(f"邮件发送失败: {str(e)}")
-            raise Exception("验证码发送失败，请稍后重试")
+                
+                if send_result:
+                    logger.error(f"第 {attempt + 1} 次发送失败，未送达邮箱: {send_result}")
+                    if attempt < max_retries:
+                        logger.info(f"等待 {retry_delay} 秒后重试...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # 指数退避
+                        continue
+                    else:
+                        raise Exception(f"邮件发送失败，未送达邮箱: {send_result}")
+                
+                logger.info(f"第 {attempt + 1} 次发送成功")
+                return True
+                
+            except smtplib.SMTPRecipientsRefused as e:
+                logger.error(f"第 {attempt + 1} 次发送失败：收件人被拒绝 - {str(e)}")
+                raise Exception("收件人邮箱地址无效")
+            except smtplib.SMTPDataError as e:
+                logger.error(f"第 {attempt + 1} 次发送失败：SMTP数据错误 - {str(e)}")
+                if attempt < max_retries:
+                    logger.info(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    raise Exception("邮件内容被服务器拒绝")
+            except smtplib.SMTPException as e:
+                logger.error(f"第 {attempt + 1} 次发送失败：SMTP异常 - {str(e)}")
+                if attempt < max_retries:
+                    logger.info(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    raise Exception("验证码发送失败，请稍后重试")
+            except Exception as e:
+                logger.error(f"第 {attempt + 1} 次发送失败：未知错误 - {str(e)}")
+                logger.error(f"错误类型：{type(e).__name__}")
+                logger.error(f"详细错误：{traceback.format_exc()}")
+                if attempt < max_retries:
+                    logger.info(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    raise Exception("验证码发送失败，请稍后重试")
+            finally:
+                # 手动关闭连接，忽略QUIT命令可能的异常
+                if server:
+                    try:
+                        server.quit()
+                    except Exception as e:
+                        # 忽略QUIT命令的异常，因为邮件已经发送成功
+                        logger.debug(f"关闭SMTP连接时发生异常（忽略）: {str(e)}")
 
     def send_security_alert(self, to_email: str, alert_message: str) -> bool:
         """发送安全提醒"""
@@ -175,7 +272,7 @@ class EmailService:
         
         # 发送邮件
         try:
-            with self._get_smtp_connection() as server:
+            with self._get_smtp_connection(timeout=10, debug=False) as server:
                 server.login(self.config["sender_email"], self.config["auth_code"])
                 server.sendmail(
                     self.config["sender_email"],
@@ -185,6 +282,20 @@ class EmailService:
             return True
         except Exception as e:
             logger.error(f"安全提醒邮件发送失败: {str(e)}")
+            return False
+    
+    def test_smtp_connection(self) -> bool:
+        """测试SMTP服务器连接"""
+        try:
+            logger.info("测试SMTP服务器连接...")
+            with self._get_smtp_connection(timeout=5, debug=True) as server:
+                logger.info("SMTP服务器连接成功")
+                logger.info(f"SMTP服务器信息: {server.helo()}")
+                return True
+        except Exception as e:
+            logger.error(f"SMTP服务器连接测试失败: {str(e)}")
+            logger.error(f"错误类型: {type(e).__name__}")
+            logger.error(f"错误详情: {repr(e)}")
             return False
 
 

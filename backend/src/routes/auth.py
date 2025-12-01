@@ -29,11 +29,7 @@ from src.core.security import verify_password, get_password_hash
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# 开发模式下跳过验证码验证的配置
-SKIP_VERIFICATION_CODE = os.getenv("SKIP_VERIFICATION_CODE", "False").lower() == "true"
 
-# 验证码存储（内存存储，仅用于开发环境）
-verification_codes = {}
 
 
 def get_user_repository() -> UserRepository:
@@ -131,11 +127,14 @@ async def send_verification_code(
     email: str = Body(..., embed=True),
     purpose: str = Body(default="login", embed=True)
 ):
-    """发送验证码到邮箱"""
+    """
+    发送验证码到邮箱
+    """
     try:
         ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
         
+        # 统一使用auth_service发送验证码，始终存储在MongoDB中
         await auth_service.send_verification_code(email, purpose, ip_address, user_agent)
         
         return {"message": f"验证码已发送到 {email}"}
@@ -148,69 +147,64 @@ async def send_verification_code(
 
 @router.post("/register", response_model=UserResponse)
 async def register(
-    user_data: UserCreate,
-    verification_code: Optional[str] = None,
+    username: str = Body(..., description="用户名"),
+    email: str = Body(..., description="邮箱地址"),
+    password: str = Body(..., description="密码"),
+    verification_code: str = Body(..., description="验证码"),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
-    """用户注册"""
-    # 开发模式下跳过验证码验证
-    if not SKIP_VERIFICATION_CODE:
-        # 验证验证码
-        email_verification = verification_codes.get(user_data.email)
-        if not email_verification:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请先获取验证码"
-            )
-        
-        if datetime.utcnow() > email_verification["expires_at"]:
-            del verification_codes[user_data.email]
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="验证码已过期，请重新获取"
-            )
-        
-        if email_verification["code"] != verification_code:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="验证码错误"
-            )
+    """
+    用户注册
+    """
+    # 1. 验证验证码
+    if not await auth_service.verify_verification_code(email, verification_code, "register"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="验证码错误或已失效"
+        )
     
-    # 检查用户名是否已存在
-    existing_user = await user_repo.find_by_username(user_data.username)
+    # 2. 验证密码强度
+    import re
+    if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{6,}$', password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码必须包含大小写字母和数字，至少6个字符"
+        )
+    
+    # 3. 检查用户名是否已存在
+    existing_user = await user_repo.find_by_username(username)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名已被使用"
         )
     
-    # 检查邮箱是否已存在
-    existing_email = await user_repo.find_by_email(user_data.email)
+    # 3. 检查邮箱是否已存在
+    existing_email = await user_repo.find_by_email(email)
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱已被注册"
         )
     
-    # 创建用户，密码加密
-    hashed_password = get_password_hash(user_data.password)
-    user_data_dict = user_data.dict()
-    user_data_dict["hashed_password"] = hashed_password
-    del user_data_dict["password"]
+    # 4. 创建用户，密码加密
+    hashed_password = get_password_hash(password)
     
-    # 设置默认值
-    user_data_dict.setdefault("is_active", True)
-    user_data_dict.setdefault("is_admin", False)
-    user_data_dict.setdefault("email_verified", True)  # 验证码验证通过，邮箱已验证
+    # 5. 准备用户数据
+    user_data_dict = {
+        "username": username,
+        "email": email,
+        "hashed_password": hashed_password,
+        "is_active": True,
+        "is_admin": False,
+        "email_verified": True,  # 验证码验证通过，邮箱已验证
+        "role": "user"
+    }
     
-    # 创建用户
+    # 6. 创建用户
     new_user = await user_repo.create(user_data_dict)
     
-    # 删除已使用的验证码
-    if user_data.email in verification_codes:
-        del verification_codes[user_data.email]
-    
-    # 返回用户响应对象，不包含密码
+    # 7. 返回用户响应对象，不包含密码
     return UserResponse(**new_user.dict())
 
 

@@ -42,7 +42,7 @@ class ServiceFactory:
             self._llm_service: Optional[LLMService] = None
             self._document_service: Optional[DocumentService] = None
             self._knowledge_graph_service: Optional[KnowledgeGraphService] = None
-            self._analyst_agent: Optional[AnalystAgent] = None
+            self._analyst_agent = None
             self._auditor_agent_service: Optional = None
             self._extension_agent: Optional = None
             self._ocr_service: Optional[OCRService] = None

@@ -44,6 +44,12 @@ uvicorn_logger = logging.getLogger('uvicorn')
 uvicorn_logger.setLevel(logging.WARNING)
 uvicorn_access_logger = logging.getLogger('uvicorn.access')
 uvicorn_access_logger.setLevel(logging.WARNING)
+
+# 将所有第三方库的日志级别设置为WARNING，减少不必要的日志输出，包括Go语言依赖库的指针地址日志
+for logger_name in logging.root.manager.loggerDict:
+    if not logger_name.startswith('src'):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # API统计缓存队列
