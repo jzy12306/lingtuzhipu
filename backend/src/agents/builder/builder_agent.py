@@ -91,7 +91,7 @@ class BuilderAgent(ABC):
         """
         pass
     
-    async def save_extracted_knowledge(self, entities: List[Entity], relations: List[Relation], document_id: str) -> Dict:
+    async def save_extracted_knowledge(self, entities: List[Entity], relations: List[Relation], document_id: str, user_id: str) -> Dict:
         """
         保存提取的知识到数据库
         
@@ -99,19 +99,31 @@ class BuilderAgent(ABC):
             entities: 要保存的实体列表
             relations: 要保存的关系列表
             document_id: 文档ID
+            user_id: 用户ID
             
         Returns:
-            保存结果统计
+            包含处理结果的字典
         """
         try:
             # 批量保存实体 - 使用事务或批量操作
             saved_entities = []
             entity_errors = []
             
-            # 将实体转换为字典格式进行批量保存
-            for entity in entities:
-                try:
-                    # 将Entity对象转换为字典
+            # 确保user_id为有效字符串
+            if not user_id:
+                user_id = "default_user"
+            
+            # 批量保存实体
+            saved_entities = []
+            entity_errors = []
+            
+            try:
+                # 创建实体ID到名称的映射，用于关系保存
+                entity_id_to_name = {entity.id: entity.name for entity in entities}
+                
+                # 将实体转换为字典格式
+                entities_data = []
+                for entity in entities:
                     entity_dict = {
                         "id": entity.id,
                         "name": entity.name,
@@ -122,21 +134,30 @@ class BuilderAgent(ABC):
                         "confidence_score": entity.confidence_score,
                         "is_valid": entity.is_valid,
                         "created_at": entity.created_at,
-                        "updated_at": entity.updated_at
+                        "updated_at": entity.updated_at,
+                        "document_id": document_id,
+                        "user_id": user_id
                     }
-                    saved_entity = await self.knowledge_repository.create_entity(entity_dict)
-                    saved_entities.append(saved_entity)
-                except Exception as e:
-                    logger.error(f"保存实体失败: {entity.name}, 错误: {str(e)}")
-                    entity_errors.append({"entity": entity.name, "error": str(e)})
+                    entities_data.append(entity_dict)
+                
+                # 批量保存实体
+                saved_entities = await self.knowledge_repository.batch_create_entities(entities_data)
+            except Exception as e:
+                logger.error(f"批量保存实体失败: {str(e)}")
+                entity_errors.append({"entity": "batch", "error": str(e)})
             
             # 批量保存关系
             saved_relations = []
             relation_errors = []
             
-            for relation in relations:
-                try:
-                    # 将Relation对象转换为字典
+            try:
+                # 将关系转换为字典格式
+                relations_data = []
+                for relation in relations:
+                    # 获取源实体和目标实体的名称
+                    source_entity_name = entity_id_to_name.get(relation.source_entity_id, "未知实体")
+                    target_entity_name = entity_id_to_name.get(relation.target_entity_id, "未知实体")
+                    
                     relation_dict = {
                         "id": relation.id,
                         "source_entity_id": relation.source_entity_id,
@@ -148,26 +169,40 @@ class BuilderAgent(ABC):
                         "confidence_score": relation.confidence_score,
                         "is_valid": relation.is_valid,
                         "created_at": relation.created_at,
-                        "updated_at": relation.updated_at
+                        "updated_at": relation.updated_at,
+                        "source_entity_name": source_entity_name,
+                        "target_entity_name": target_entity_name,
+                        "document_id": document_id,
+                        "user_id": user_id
                     }
-                    saved_relation = await self.knowledge_repository.create_relation(relation_dict)
-                    saved_relations.append(saved_relation)
-                except Exception as e:
-                    logger.error(f"保存关系失败: {relation.type}, 错误: {str(e)}")
-                    relation_errors.append({"relation": relation.type, "error": str(e)})
+                    relations_data.append(relation_dict)
+                
+                # 批量保存关系
+                saved_relations = await self.knowledge_repository.batch_create_relations(relations_data)
+            except Exception as e:
+                logger.error(f"批量保存关系失败: {str(e)}")
+                relation_errors.append({"relation": "batch", "error": str(e)})
             
-            # 更新文档状态
-            await self.knowledge_repository.update_document_status(
+            # 同时更新文档状态、顶层计数和processing_details字段
+            update_success = await self.knowledge_repository.update_document_status(
                 document_id=document_id,
                 status="processed",
+                entities_count=len(saved_entities),
+                relations_count=len(saved_relations),
                 processing_details={
-                    "entities_count": len(saved_entities),
-                    "relations_count": len(saved_relations),
+                    "entities_saved": len(saved_entities),
+                    "relations_saved": len(saved_relations),
                     "processed_at": datetime.utcnow().isoformat()
                 }
             )
             
+            if update_success:
+                logger.info(f"文档状态更新成功: 实体 {len(saved_entities)}, 关系 {len(saved_relations)}")
+            else:
+                logger.warning(f"文档状态更新失败: {document_id}")
+            
             logger.info(f"知识保存完成 - 实体: {len(saved_entities)}, 关系: {len(saved_relations)}")
+            logger.info(f"文档计数已更新: 实体 {len(saved_entities)}, 关系 {len(saved_relations)}")
             
             return {
                 "entities": {

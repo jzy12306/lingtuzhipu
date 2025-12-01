@@ -120,6 +120,29 @@ class UserRepository:
             if "_id" in user_data:
                 del user_data["_id"]
             
+            # 处理role字段
+            if "role" not in user_data:
+                # 根据is_superuser或is_admin设置角色
+                if user_data.get("is_superuser", False):
+                    user_data["role"] = "admin"
+                elif user_data.get("is_admin", False):
+                    user_data["role"] = "admin"
+                else:
+                    user_data["role"] = "user"
+            # 处理密码哈希字段（兼容不同的字段名）
+            if "password_hash" not in user_data:
+                # 检查是否有其他密码哈希字段名
+                if "hashed_password" in user_data:
+                    user_data["password_hash"] = user_data["hashed_password"]
+                elif "password" in user_data:
+                    # 如果是明文密码，进行加密
+                    if not user_data["password"].startswith("$2b$"):
+                        user_data["password_hash"] = self.get_password_hash(user_data["password"])
+                    else:
+                        user_data["password_hash"] = user_data["password"]
+                else:
+                    # 如果没有密码哈希，设置为None
+                    user_data["password_hash"] = None
             return User(**user_data)
         except Exception as e:
             self.logger.error(f"创建用户失败: {str(e)}")
@@ -163,12 +186,15 @@ class UserRepository:
             # 如果找不到，尝试用ObjectId查找（适用于MongoDB）
             if not user_data:
                 try:
+                    # 将字符串转换为ObjectId对象
+                    from bson import ObjectId
                     user_data = await collection.find_one({"_id": ObjectId(user_id)})
                     if user_data:
                         # 转换MongoDB的_id为id
                         user_data["id"] = str(user_data.pop("_id"))
-                except Exception:
+                except Exception as e:
                     # 对于内存集合，继续尝试其他方式
+                    self.logger.warning(f"尝试用ObjectId查找用户失败: {str(e)}")
                     pass
             
             # 最后尝试用_id字段的字符串形式查找（兼容各种情况）
@@ -194,6 +220,29 @@ class UserRepository:
                     user_data["is_superuser"] = False
                 if "email_verified" not in user_data:
                     user_data["email_verified"] = False
+                # 处理role字段
+                if "role" not in user_data:
+                    # 根据is_superuser或is_admin设置角色
+                    if user_data.get("is_superuser", False):
+                        user_data["role"] = "admin"
+                    elif user_data.get("is_admin", False):
+                        user_data["role"] = "admin"
+                    else:
+                        user_data["role"] = "user"
+                # 处理密码哈希字段（兼容不同的字段名）
+                if "password_hash" not in user_data:
+                    # 检查是否有其他密码哈希字段名
+                    if "hashed_password" in user_data:
+                        user_data["password_hash"] = user_data["hashed_password"]
+                    elif "password" in user_data:
+                        # 如果是明文密码，进行加密
+                        if not user_data["password"].startswith("$2b$"):
+                            user_data["password_hash"] = self.get_password_hash(user_data["password"])
+                        else:
+                            user_data["password_hash"] = user_data["password"]
+                    else:
+                        # 如果没有密码哈希，设置为None
+                        user_data["password_hash"] = None
                 return User(**user_data)
             
             self.logger.warning(f"[UserRepository] 未找到用户，ID: {user_id}")
@@ -226,6 +275,29 @@ class UserRepository:
                     user_data["is_superuser"] = False
                 if "email_verified" not in user_data:
                     user_data["email_verified"] = False
+                # 处理role字段
+                if "role" not in user_data:
+                    # 根据is_superuser或is_admin设置角色
+                    if user_data.get("is_superuser", False):
+                        user_data["role"] = "admin"
+                    elif user_data.get("is_admin", False):
+                        user_data["role"] = "admin"
+                    else:
+                        user_data["role"] = "user"
+                # 处理密码哈希字段（兼容不同的字段名）
+                if "password_hash" not in user_data:
+                    # 检查是否有其他密码哈希字段名
+                    if "hashed_password" in user_data:
+                        user_data["password_hash"] = user_data["hashed_password"]
+                    elif "password" in user_data:
+                        # 如果是明文密码，进行加密
+                        if not user_data["password"].startswith("$2b$"):
+                            user_data["password_hash"] = self.get_password_hash(user_data["password"])
+                        else:
+                            user_data["password_hash"] = user_data["password"]
+                    else:
+                        # 如果没有密码哈希，设置为None
+                        user_data["password_hash"] = None
                 return User(**user_data)
             return None
         except Exception as e:
@@ -256,6 +328,29 @@ class UserRepository:
                     user_data["is_superuser"] = False
                 if "email_verified" not in user_data:
                     user_data["email_verified"] = False
+                # 处理role字段
+                if "role" not in user_data:
+                    # 根据is_superuser或is_admin设置角色
+                    if user_data.get("is_superuser", False):
+                        user_data["role"] = "admin"
+                    elif user_data.get("is_admin", False):
+                        user_data["role"] = "admin"
+                    else:
+                        user_data["role"] = "user"
+                # 处理密码哈希字段（兼容不同的字段名）
+                if "password_hash" not in user_data:
+                    # 检查是否有其他密码哈希字段名
+                    if "hashed_password" in user_data:
+                        user_data["password_hash"] = user_data["hashed_password"]
+                    elif "password" in user_data:
+                        # 如果是明文密码，进行加密
+                        if not user_data["password"].startswith("$2b$"):
+                            user_data["password_hash"] = self.get_password_hash(user_data["password"])
+                        else:
+                            user_data["password_hash"] = user_data["password"]
+                    else:
+                        # 如果没有密码哈希，设置为None
+                        user_data["password_hash"] = None
                 return User(**user_data)
             return None
         except Exception as e:
@@ -344,9 +439,9 @@ class UserRepository:
             users = []
             
             async for user_data in cursor:
-                # 移除MongoDB的_id字段
+                # 将MongoDB的_id字段转换为id字段
                 if "_id" in user_data:
-                    del user_data["_id"]
+                    user_data["id"] = str(user_data.pop("_id"))
                 users.append(User(**user_data))
             
             return users
@@ -383,3 +478,30 @@ class UserRepository:
         except Exception as e:
             self.logger.error(f"检查用户名是否存在失败: {str(e)}")
             raise
+    
+    async def find_all(self, skip: int = 0, limit: int = 100, filters: Optional[Dict[str, Any]] = None) -> List[User]:
+        """查找所有用户（兼容方法）"""
+        return await self.list_users(skip=skip, limit=limit, filter_criteria=filters)
+    
+    async def count_all(self) -> int:
+        """统计所有用户数量"""
+        return await self.count_users()
+    
+    async def count_active_users(self) -> int:
+        """统计活跃用户数量"""
+        return await self.count_users({"is_active": True})
+    
+    async def count_admin_users(self) -> int:
+        """统计管理员用户数量"""
+        return await self.count_users({"is_admin": True})
+    
+    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """更新用户信息（兼容方法）"""
+        user = await self.update(user_id, update_data)
+        if user:
+            return user.dict()
+        return None
+    
+    async def delete_user(self, user_id: str) -> None:
+        """删除用户（兼容方法）"""
+        await self.delete(user_id)

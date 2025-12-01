@@ -6,6 +6,7 @@ import pkgutil
 from typing import Dict, Any, List, Optional
 import uuid
 import asyncio
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,20 @@ class Plugin:
         self.status = "loaded"
         self.enabled = True
         self.dependencies = getattr(module, "__dependencies__", [])
+        self.dependencies_satisfied = True  # 依赖是否满足
         self.extensions = getattr(module, "__extensions__", [])
         self.entry_points = getattr(module, "__entry_points__", {})
         self.logger = logging.getLogger(f"Plugin[{name}]")
+        self.installed_time = datetime.now()
+        self.last_updated = datetime.now()
+        self.security_check_passed = True  # 安全性检查是否通过
+        self.update_available = False  # 是否有更新可用
+        self.latest_version = self.version  # 最新版本
+        self.checksum = None  # 插件文件校验和
+        self.license = getattr(module, "__license__", "MIT")  # 插件许可证
+        self.homepage = getattr(module, "__homepage__", "")  # 插件主页
+        self.repository = getattr(module, "__repository__", "")  # 插件仓库
+        self.keywords = getattr(module, "__keywords__", [])  # 插件关键词
     
     async def initialize(self) -> bool:
         """初始化插件"""
@@ -59,9 +71,19 @@ class Plugin:
             "status": self.status,
             "enabled": self.enabled,
             "dependencies": self.dependencies,
+            "dependencies_satisfied": self.dependencies_satisfied,
             "extensions": self.extensions,
             "entry_points": self.entry_points,
-            "path": self.path
+            "path": self.path,
+            "installed_time": self.installed_time.isoformat(),
+            "last_updated": self.last_updated.isoformat(),
+            "security_check_passed": self.security_check_passed,
+            "update_available": self.update_available,
+            "latest_version": self.latest_version,
+            "license": self.license,
+            "homepage": self.homepage,
+            "repository": self.repository,
+            "keywords": self.keywords
         }
 
 
@@ -72,6 +94,9 @@ class PluginManager:
         self.plugins: Dict[str, Plugin] = {}
         self.plugin_paths: List[str] = []
         self.logger = logger.getChild("PluginManager")
+        self.dependency_graph = {}  # 依赖图
+        self.update_check_interval = 3600  # 更新检查间隔（秒）
+        self.last_update_check = datetime.now()  # 上次更新检查时间
     
     async def initialize(self) -> bool:
         """初始化插件管理器"""
@@ -136,6 +161,9 @@ class PluginManager:
         for plugin_path in self.plugin_paths:
             await self._load_plugins_from_path(plugin_path)
         
+        # 解析插件依赖关系
+        await self._resolve_dependencies()
+        
         self.logger.info(f"插件加载完成，共加载 {len(self.plugins)} 个插件")
     
     async def _load_plugins_from_path(self, plugin_path: str):
@@ -162,6 +190,163 @@ class PluginManager:
                 # 加载目录作为插件包
                 await self._load_plugin_from_package(os.path.join(root, dir))
     
+    async def _check_plugin_dependencies(self, plugin: Plugin) -> bool:
+        """检查插件依赖"""
+        try:
+            self.logger.info(f"检查插件依赖: {plugin.name}")
+            
+            # 简单的依赖检查：检查依赖插件是否已加载
+            for dependency in plugin.dependencies:
+                # 解析依赖格式：plugin_name>=version
+                if ">=" in dependency:
+                    dep_name, dep_version = dependency.split(">=", 1)
+                else:
+                    dep_name = dependency
+                    dep_version = None
+                
+                # 检查依赖插件是否已加载
+                if dep_name not in self.plugins:
+                    self.logger.warning(f"插件 {plugin.name} 的依赖 {dep_name} 未加载")
+                    plugin.dependencies_satisfied = False
+                    return False
+                
+                # 检查依赖版本
+                if dep_version:
+                    dep_plugin = self.plugins[dep_name]
+                    if dep_plugin.version < dep_version:
+                        self.logger.warning(f"插件 {plugin.name} 的依赖 {dep_name} 版本不满足要求")
+                        plugin.dependencies_satisfied = False
+                        return False
+            
+            plugin.dependencies_satisfied = True
+            return True
+        except Exception as e:
+            self.logger.error(f"检查插件依赖失败: {str(e)}")
+            plugin.dependencies_satisfied = False
+            return False
+    
+    async def _check_plugin_security(self, plugin: Plugin) -> bool:
+        """检查插件安全性"""
+        try:
+            self.logger.info(f"检查插件安全性: {plugin.name}")
+            
+            # 简单的安全性检查：检查插件是否包含危险操作
+            # 1. 检查是否导入了危险模块
+            dangerous_modules = ["os", "sys", "subprocess", "shutil", "socket", "pickle"]
+            for module_name in dangerous_modules:
+                if module_name in sys.modules and hasattr(plugin.module, module_name):
+                    self.logger.warning(f"插件 {plugin.name} 导入了危险模块: {module_name}")
+                    # 不阻止加载，但标记为安全性检查未通过
+                    plugin.security_check_passed = False
+            
+            # 2. 检查是否有危险属性
+            dangerous_attrs = ["exec", "eval", "__import__", "open", "write", "remove"]
+            for attr_name in dangerous_attrs:
+                if hasattr(plugin.module, attr_name):
+                    self.logger.warning(f"插件 {plugin.name} 包含危险属性: {attr_name}")
+                    plugin.security_check_passed = False
+            
+            return plugin.security_check_passed
+        except Exception as e:
+            self.logger.error(f"检查插件安全性失败: {str(e)}")
+            plugin.security_check_passed = False
+            return False
+    
+    async def _resolve_dependencies(self) -> bool:
+        """解析插件依赖关系"""
+        try:
+            self.logger.info("解析插件依赖关系")
+            
+            # 构建依赖图
+            self.dependency_graph = {}
+            for plugin_name, plugin in self.plugins.items():
+                self.dependency_graph[plugin_name] = plugin.dependencies
+            
+            # 简单的依赖解析：检查每个插件的依赖是否都已加载
+            for plugin_name, plugin in self.plugins.items():
+                await self._check_plugin_dependencies(plugin)
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"解析插件依赖关系失败: {str(e)}")
+            return False
+    
+    async def check_for_updates(self) -> Dict[str, Any]:
+        """检查插件更新"""
+        try:
+            self.logger.info("检查插件更新")
+            
+            # 检查是否需要更新检查
+            if (datetime.now() - self.last_update_check).total_seconds() < self.update_check_interval:
+                self.logger.info("更新检查间隔未到，跳过检查")
+                return {
+                    "success": True,
+                    "message": "更新检查间隔未到，跳过检查",
+                    "updates_available": 0
+                }
+            
+            # 简单的更新检查：检查插件版本
+            updates_available = 0
+            for plugin in self.plugins.values():
+                # 这里可以添加实际的更新检查逻辑，比如从插件仓库获取最新版本
+                # 目前只是模拟检查
+                plugin.update_available = False
+                plugin.latest_version = plugin.version
+            
+            self.last_update_check = datetime.now()
+            
+            return {
+                "success": True,
+                "message": "更新检查完成",
+                "updates_available": updates_available
+            }
+        except Exception as e:
+            self.logger.error(f"检查插件更新失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"检查插件更新失败: {str(e)}",
+                "updates_available": 0
+            }
+    
+    async def _update_plugin(self, plugin_name: str) -> Dict[str, Any]:
+        """更新插件"""
+        try:
+            self.logger.info(f"更新插件: {plugin_name}")
+            
+            # 检查插件是否已加载
+            if plugin_name not in self.plugins:
+                return {
+                    "success": False,
+                    "message": f"插件未加载: {plugin_name}"
+                }
+            
+            plugin = self.plugins[plugin_name]
+            
+            # 检查是否有更新可用
+            if not plugin.update_available:
+                return {
+                    "success": False,
+                    "message": f"插件 {plugin_name} 没有可用更新"
+                }
+            
+            # 这里可以添加实际的更新逻辑，比如从插件仓库下载最新版本
+            # 目前只是模拟更新
+            plugin.version = plugin.latest_version
+            plugin.update_available = False
+            plugin.last_updated = datetime.now()
+            
+            return {
+                "success": True,
+                "message": f"插件 {plugin_name} 更新成功",
+                "plugin": plugin.get_info()
+            }
+        except Exception as e:
+            self.logger.error(f"更新插件失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"更新插件失败: {str(e)}"
+            }
+    
     async def _load_plugin_from_file(self, file_path: str):
         """从文件加载插件"""
         try:
@@ -187,6 +372,9 @@ class PluginManager:
             
             # 创建插件实例
             plugin = Plugin(plugin_name, module, file_path)
+            
+            # 检查插件安全性
+            await self._check_plugin_security(plugin)
             
             # 初始化插件
             if await plugin.initialize():
@@ -230,6 +418,9 @@ class PluginManager:
             
             # 创建插件实例
             plugin = Plugin(plugin_name, module, package_path)
+            
+            # 检查插件安全性
+            await self._check_plugin_security(plugin)
             
             # 初始化插件
             if await plugin.initialize():
@@ -415,6 +606,42 @@ class PluginManager:
             return {
                 "success": False,
                 "message": f"获取插件信息失败: {str(e)}"
+            }
+    
+    async def check_plugin_updates(self) -> Dict[str, Any]:
+        """检查插件更新"""
+        try:
+            return await self.check_for_updates()
+        except Exception as e:
+            self.logger.error(f"检查插件更新失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"检查插件更新失败: {str(e)}"
+            }
+    
+    async def update_plugin_by_name(self, plugin_name: str) -> Dict[str, Any]:
+        """根据名称更新插件"""
+        try:
+            return await self._update_plugin(plugin_name)
+        except Exception as e:
+            self.logger.error(f"更新插件失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"更新插件失败: {str(e)}"
+            }
+    
+    async def get_dependency_graph(self) -> Dict[str, Any]:
+        """获取依赖图"""
+        try:
+            return {
+                "success": True,
+                "dependency_graph": self.dependency_graph
+            }
+        except Exception as e:
+            self.logger.error(f"获取依赖图失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"获取依赖图失败: {str(e)}"
             }
     
     def get_plugin_by_name(self, plugin_name: str) -> Optional[Plugin]:

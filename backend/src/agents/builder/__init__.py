@@ -81,10 +81,7 @@ class BuilderAgentService:
         if not document:
             raise ValueError(f"文档不存在: {document_id}")
         
-        # 检查文档状态
-        if document.status == "processing":
-            raise ValueError("文档正在处理中")
-        
+        # 检查文档状态，只检查是否已经处理过，不检查是否正在处理中
         if document.status == "processed":
             raise ValueError("文档已经处理过")
         

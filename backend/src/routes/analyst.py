@@ -256,9 +256,10 @@ async def test_query(
         from src.services.service_factory import service_factory
         
         # 通过service_factory获取analyst_agent实例处理查询
+        # 注意：process_query方法接受两个参数：query和user_context（可选）
         result = await service_factory.analyst_agent.process_query(
-            query=request.query,
-            user_context={"user_id": "test_user"}
+            request.query,
+            {"user_id": "test_user"}
         )
         
         return {

@@ -10,6 +10,8 @@ class EntityBase(BaseModel):
     description: Optional[str] = Field(default="", description="实体描述")
     properties: Optional[Dict[str, Any]] = Field(default_factory=dict, description="实体属性")
     source_document_id: str = Field(..., description="来源文档ID")
+    document_id: str = Field(..., description="文档ID")
+    user_id: str = Field(..., description="用户ID")
 
 
 class EntityCreate(EntityBase):
@@ -47,10 +49,14 @@ class RelationBase(BaseModel):
     """关系基础模型"""
     source_entity_id: str = Field(..., description="源实体ID")
     target_entity_id: str = Field(..., description="目标实体ID")
+    source_entity_name: str = Field(..., description="源实体名称")
+    target_entity_name: str = Field(..., description="目标实体名称")
     type: str = Field(..., description="关系类型")
     description: Optional[str] = Field(default="", description="关系描述")
     properties: Optional[Dict[str, Any]] = Field(default_factory=dict, description="关系属性")
     source_document_id: str = Field(..., description="来源文档ID")
+    document_id: str = Field(..., description="文档ID")
+    user_id: str = Field(..., description="用户ID")
 
 
 class RelationCreate(RelationBase):

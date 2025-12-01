@@ -5,10 +5,10 @@ import asyncio
 import re
 from datetime import datetime
 
-from agents.analyst.analyst_agent import AnalystAgent
-from repositories.knowledge_repository import KnowledgeRepository
-from utils.config import settings
-from services.llm_service import llm_service
+from src.agents.analyst.analyst_agent import AnalystAgent
+from src.repositories.knowledge_repository import KnowledgeRepository
+from src.utils.config import settings
+from src.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,45 +24,135 @@ class LLMAnalystAgent(AnalystAgent):
         self.max_complexity_level = 5  # 最大查询复杂度级别
         logger.info("LLMAnalystAgent初始化完成")
     
-    async def process_query(self, query: str, user_id: Optional[str] = None, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def process_query(self, query: str, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         处理用户自然语言查询的完整流程
         """
         try:
+            user_id = user_context.get('user_id') if user_context else None
             logger.info(f"处理查询: {query[:50]}... 用户: {user_id}")
             
-            # 1. 分析查询复杂度
-            complexity_result = await self.analyze_query_complexity(query)
-            if complexity_result['level'] > self.max_complexity_level:
-                return self.format_response(
-                    False, 
-                    None, 
-                    f"查询过于复杂，请简化查询或拆分为多个简单查询。复杂度级别: {complexity_result['level']}"
-                )
+            # 简化流程：直接使用LLM回答问题并提取实体和关系
+            prompt = f"""
+            你是一个知识图谱分析助手。请回答用户的问题，并从问题和答案中提取相关的实体和关系。
             
-            # 2. 生成数据库查询
-            query_result = await self.generate_query(query)
-            if not query_result['success']:
-                return query_result
+            用户问题: {query}
             
-            # 3. 执行查询
-            execute_result = await self.execute_query(query_result['data'], user_id)
-            if not execute_result['success']:
-                return execute_result
+            请提供:
+            1. 对问题的详细回答
+            2. 从问题和答案中识别出的实体（如公司、人物、产品等）
+            3. 实体之间的关系
             
-            # 4. 解释结果
-            explain_result = await self.explain_results(query, execute_result['data'])
+            输出格式（必须是有效的JSON）:
+            {{
+                "answer": "对问题的详细回答",
+                "entities": [
+                    {{"name": "实体名称", "type": "实体类型", "properties": {{"description": "描述"}}}}
+                ],
+                "relationships": [
+                    {{"source": "源实体", "target": "目标实体", "type": "关系类型"}}
+                ],
+                "summary": "简短总结"
+            }}
+            """
             
-            # 5. 组合结果
+            response = await llm_service.chat_completion(
+                messages=[
+                    {"role": "system", "content": "你是一个专业的知识图谱分析助手，擅长回答问题并提取实体和关系。"},
+                    {"role": "user", "content": prompt}
+                ],
+                model=settings.LLM_MODEL,
+                response_format={"type": "json_object"}
+            )
+            
+            # 打印LLM返回的原始数据，方便调试
+            logger.info(f"LLM返回的原始数据类型: {type(response)}")
+            
+            # 解析LLM返回的数据
+            # 如果返回的是字典且包含content字段，说明是Kimi API的格式
+            if isinstance(response, dict) and 'content' in response:
+                content = response['content']
+                # 移除markdown代码块标记
+                if content.startswith('```json'):
+                    content = content[7:]  # 移除 ```json
+                if content.startswith('```'):
+                    content = content[3:]  # 移除 ```
+                if content.endswith('```'):
+                    content = content[:-3]  # 移除结尾的 ```
+                content = content.strip()
+                
+                # 解析JSON
+                try:
+                    parsed_data = json.loads(content)
+                    response = parsed_data
+                    logger.info(f"成功解析JSON数据")
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON解析失败: {e}")
+                    logger.error(f"原始内容: {content[:200]}")
+            
+            # 提取实体和关系
+            entities = response.get('entities', [])
+            relationships = response.get('relationships', [])
+            
+            # 尝试将实体和关系保存到知识图谱
+            saved_entities = []
+            saved_relationships = []
+            
+            try:
+                # 保存实体到知识图谱
+                for entity in entities:
+                    try:
+                        entity_data = {
+                            'name': entity.get('name', ''),
+                            'entity_type': entity.get('type', 'Unknown'),
+                            'properties': entity.get('properties', {}),
+                            'user_id': user_id,
+                            'document_id': None,  # 查询提取的实体没有关联文档
+                            'source_document_id': None
+                        }
+                        saved_entity = await self.knowledge_repository.create_entity(entity_data)
+                        saved_entities.append(saved_entity)
+                        logger.info(f"成功保存实体: {entity.get('name')}")
+                    except Exception as e:
+                        logger.warning(f"保存实体失败: {entity.get('name')}, 错误: {str(e)}")
+                
+                # 保存关系到知识图谱
+                for rel in relationships:
+                    try:
+                        relation_data = {
+                            'source_entity_name': rel.get('source', ''),
+                            'target_entity_name': rel.get('target', ''),
+                            'relation_type': rel.get('type', 'RELATED_TO'),
+                            'properties': {},
+                            'user_id': user_id,
+                            'document_id': None,
+                            'source_document_id': None
+                        }
+                        saved_rel = await self.knowledge_repository.create_relation(relation_data)
+                        saved_relationships.append(saved_rel)
+                        logger.info(f"成功保存关系: {rel.get('source')} -> {rel.get('target')}")
+                    except Exception as e:
+                        logger.warning(f"保存关系失败: {rel.get('source')} -> {rel.get('target')}, 错误: {str(e)}")
+                        
+            except Exception as e:
+                logger.warning(f"知识图谱保存过程出错: {str(e)}")
+            
+            # 组合结果
             final_result = {
                 'query': query,
-                'database_query': query_result['data'],
-                'complexity': complexity_result,
-                'results': execute_result['data'],
-                'explanation': explain_result['data']['explanation'],
-                'visualization_suggestions': explain_result['data'].get('visualization_suggestions', []),
+                'answer': response.get('answer', ''),
+                'entities': entities,
+                'relationships': relationships,
+                'saved_entities_count': len(saved_entities),
+                'saved_relationships_count': len(saved_relationships),
+                'summary': response.get('summary', ''),
                 'timestamp': datetime.now().isoformat()
             }
+            
+            # 添加详细日志，方便调试
+            logger.info(f"查询结果 - 回答长度: {len(final_result['answer'])}, 实体数: {len(entities)}, 关系数: {len(relationships)}")
+            logger.info(f"实体列表: {[e.get('name', '') for e in entities]}")
+            logger.info(f"关系列表: {[(r.get('source', ''), r.get('type', ''), r.get('target', '')) for r in relationships]}")
             
             return self.format_response(True, final_result)
             
@@ -75,8 +165,12 @@ class LLMAnalystAgent(AnalystAgent):
         将自然语言查询转换为数据库查询
         """
         try:
-            # 获取知识图谱的元数据
-            schema_info = await self.knowledge_repository.get_graph_schema()
+            # 暂时使用简化的schema信息，因为Neo4j未连接
+            schema_info = {
+                "nodes": ["Company", "Person", "Product"],
+                "relationships": ["WORKS_AT", "PRODUCES", "OWNS"],
+                "note": "知识图谱暂未连接，使用模拟数据"
+            }
             
             # 构建提示词
             prompt = f"""
@@ -89,11 +183,11 @@ class LLMAnalystAgent(AnalystAgent):
             {natural_language_query}
             
             输出格式要求:
-            {
+            {{
                 "query": "生成的Cypher查询语句",
                 "query_type": "查询类型(如节点查询、关系查询、路径查询等)",
                 "description": "查询功能描述"
-            }
+            }}
             
             请注意:
             1. 查询必须安全，避免删除或修改操作
@@ -171,11 +265,11 @@ class LLMAnalystAgent(AnalystAgent):
             3. 可能的可视化建议
             
             输出格式:
-            {
+            {{
                 "explanation": "对结果的解释",
                 "insights": ["见解1", "见解2", ...],
                 "visualization_suggestions": ["可视化建议1", "可视化建议2", ...]
-            }
+            }}
             """
             
             response = await llm_service.chat_completion(
@@ -230,11 +324,11 @@ class LLMAnalystAgent(AnalystAgent):
                 3. 任何图表或可视化的描述（如果有）
                 
                 输出格式:
-                {
+                {{
                     "output": "代码执行输出",
                     "result_description": "结果描述",
                     "visualization": "可视化描述（如果有）"
-                }
+                }}
                 """
                 
                 response = await llm_service.chat_completion(
@@ -271,12 +365,12 @@ class LLMAnalystAgent(AnalystAgent):
             {query}
             
             输出格式:
-            {
+            {{
                 "level": 复杂度级别(1-10),
                 "reason": "复杂度评估理由",
                 "estimated_execution_time": "预估执行时间(毫秒)",
                 "optimization_suggestions": ["优化建议1", "优化建议2"]
-            }
+            }}
             """
             
             response = await llm_service.chat_completion(

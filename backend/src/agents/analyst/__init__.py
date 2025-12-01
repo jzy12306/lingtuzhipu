@@ -1,8 +1,9 @@
 from typing import Dict, List, Any, Optional
 import logging
-from agents.analyst.analyst_agent import AnalystAgent
-from agents.analyst.llm_analyst_agent import LLMAnalystAgent
-from repositories.knowledge_repository import KnowledgeRepository
+import threading
+from ..analyst.analyst_agent import AnalystAgent
+from ..analyst.llm_analyst_agent import LLMAnalystAgent
+from ...repositories.knowledge_repository import KnowledgeRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,22 +37,14 @@ class AnalystAgentService:
     提供统一的接口来使用分析师智能体
     """
     _instance = None
-    _lock = False
+    _lock = threading.Lock()
     
     def __new__(cls, knowledge_repository: Optional[KnowledgeRepository] = None):
         if cls._instance is None:
-            # 简单的线程安全实现
-            while cls._lock:
-                pass
-            
-            cls._lock = True
-            try:
+            with cls._lock:
                 if cls._instance is None:
                     cls._instance = super(AnalystAgentService, cls).__new__(cls)
-                    # 初始化服务
                     cls._instance._initialize(knowledge_repository)
-            finally:
-                cls._lock = False
         
         return cls._instance
     

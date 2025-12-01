@@ -1,56 +1,179 @@
+"""
+依赖工具模块
+提供认证、权限校验等依赖函数
+"""
+
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from typing import Optional, Dict, Any
+from typing import Optional
+from datetime import datetime
 import os
 
-from src.models.user import User, TokenData
 from src.repositories.user_repository import UserRepository
-
-# 配置
+from src.schemas.user import User, UserRole, TokenData
 from src.config.settings import settings
+
+# 安全配置
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# HTTP Bearer Token认证
+security = HTTPBearer(auto_error=False)
+
 
 def get_user_repository() -> UserRepository:
     """获取用户仓库实例"""
     return UserRepository()
 
 
+def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[str]:
+    """
+    从Token中提取用户ID
+    
+    返回:
+        用户ID或None（如果token无效）
+    """
+    if not credentials:
+        return None
+    
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        return user_id
+    except JWTError:
+        return None
+
+
+async def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> Optional[User]:
+    """
+    获取当前用户（可选）
+    
+    如果token无效或用户不存在，返回None而不是抛出异常
+    
+    返回:
+        User对象或None
+    """
+    if not credentials:
+        return None
+    
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+    
+    # 获取用户
+    user = await user_repo.find_by_id(user_id)
+    if user is None:
+        return None
+    
+    # 转换并确保is_admin字段存在
+    return _ensure_user_fields(user)
+
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     user_repo: UserRepository = Depends(get_user_repository)
 ) -> User:
-    """获取当前用户"""
+    """
+    获取当前活跃用户
+    
+    依赖:
+        credentials: HTTP Bearer Token
+        
+    返回:
+        User对象
+        
+    异常:
+        HTTPException: 401 - 无法验证凭据
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无法验证凭据",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    if not credentials:
+        raise credentials_exception
+    
+    token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        token_data = TokenData(user_id=user_id)
-    except JWTError:
+        
+        # 验证token类型
+        token_type = payload.get("type")
+        if token_type == "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="访问令牌无效，请使用访问令牌"
+            )
+    except JWTError as e:
+        # 记录详细的错误信息
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"JWT验证错误: {str(e)}")
         raise credentials_exception
     
-    user = await user_repo.find_by_id(token_data.user_id)
+    # 获取用户
+    user = await user_repo.find_by_id(user_id)
     if user is None:
         raise credentials_exception
     
-    return user
+    # 转换并确保is_admin字段存在
+    return _ensure_user_fields(user)
+
+
+def _ensure_user_fields(user_data):
+    """
+    确保用户对象包含所有必要字段，特别是is_admin
+    
+    参数:
+        user_data: 从数据库加载的用户数据（dict或User对象）
+        
+    返回:
+        User对象，确保包含is_admin字段
+    """
+    # 如果是字典，转换为User对象
+    if isinstance(user_data, dict):
+        # 确保is_admin字段存在
+        if 'is_admin' not in user_data:
+            # 根据role字段推断
+            role = user_data.get('role', 'user')
+            user_data['is_admin'] = (role == 'admin')
+        
+        return User(**user_data)
+    
+    # 如果是User对象，检查是否有is_admin属性
+    if not hasattr(user_data, 'is_admin'):
+        # 根据role字段设置
+        role = getattr(user_data, 'role', UserRole.USER)
+        user_data.is_admin = (role == UserRole.ADMIN)
+    
+    return user_data
 
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
-    """获取当前活跃用户"""
+    """
+    获取当前活跃用户
+    
+    依赖: get_current_user
+    
+    异常:
+        HTTPException: 400 - 用户账户已被禁用
+    """
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="用户账户已被禁用")
     return current_user
@@ -60,7 +183,7 @@ async def get_current_admin_user(
     current_user: User = Depends(get_current_active_user)
 ) -> User:
     """获取当前管理员用户"""
-    if not current_user.is_admin:
+    if not getattr(current_user, 'is_admin', False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="需要管理员权限"
@@ -69,49 +192,53 @@ async def get_current_admin_user(
 
 
 async def get_optional_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(security),
     user_repo: UserRepository = Depends(get_user_repository)
 ) -> Optional[User]:
     """
-    获取可选的当前用户（不强制要求认证）
+    可选的用户认证
     
-    Args:
-        token: OAuth2 Bearer token
-        
-    Returns:
-        用户对象或None
+    有有效的token则返回用户，否则返回None
     """
     if not token:
         return None
     
     try:
-        return await get_current_user(token, user_repo)
-    except HTTPException:
+        payload = jwt.decode(token.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
         return None
+    
+    user = await user_repo.get_user_by_id(user_id)
+    if user is None:
+        return None
+    
+    return _ensure_user_fields(user)
 
 
 async def validate_document_permission(
     document_id: str,
-    current_user: User = Depends(get_current_active_user),
-    document_repo = None
-) -> Any:
+    current_user: User = Depends(get_current_user)
+):
     """
-    验证用户是否有权限访问文档，并返回文档对象
+    验证文档访问权限
     
-    Args:
-        document_id: 文档ID
+    依赖:
+        document_id: 文档ID（路径参数）
         current_user: 当前用户
-        document_repo: 文档仓库实例
         
-    Returns:
-        Any: 文档对象
+    返回:
+        Document对象
+        
+    异常:
+        HTTPException: 404 - 文档不存在
+        HTTPException: 403 - 无权访问此文档
     """
-    # 延迟导入避免循环依赖
-    if document_repo is None:
-        from src.repositories.document_repository import DocumentRepository
-        document_repo = DocumentRepository()
+    from src.repositories.document_repository import DocumentRepository
+    document_repo = DocumentRepository()
     
-    # 获取文档
     document = await document_repo.get_document(document_id)
     if not document:
         raise HTTPException(
@@ -120,7 +247,7 @@ async def validate_document_permission(
         )
     
     # 管理员可以访问所有文档
-    if current_user.is_admin:
+    if getattr(current_user, 'is_admin', False):
         return document
     
     # 用户只能访问自己创建的文档
@@ -142,111 +269,109 @@ async def validate_resource_ownership(
     resource_type: str,
     current_user: User = Depends(get_current_active_user)
 ) -> bool:
-    """验证资源所有权"""
-    # 如果是管理员，直接返回通过
-    if current_user.is_admin:
+    """
+    验证资源所有权
+    
+    参数:
+        resource_id: 资源ID
+        resource_type: 资源类型（document/entity/relation）
+        current_user: 当前用户
+        
+    返回:
+        bool: 是否有权限
+        
+    异常:
+        HTTPException: 403 - 权限不足
+    """
+    from src.repositories.document_repository import DocumentRepository
+    from src.repositories.knowledge_repository import KnowledgeRepository
+    
+    document_repo = DocumentRepository()
+    knowledge_repo = KnowledgeRepository()
+    
+    # 管理员可以访问所有资源
+    if getattr(current_user, 'is_admin', False):
         return True
     
-    # 根据资源类型验证所有权
+    # 如果是文档相关的权限检查
     if resource_type == "document":
-        # 这里应该调用文档仓库检查文档所有权
-        # 简化处理，暂时假设所有非管理员只能访问自己的资源
-        return True
+        document = await document_repo.get_document(resource_id)
+        if document and (document.user_id == current_user.id or getattr(current_user, 'is_admin', False)):
+            return True
+    
+    # 如果是知识实体相关的权限检查
     elif resource_type == "entity":
-        # 实体所有权验证
-        return True
+        entity = await knowledge_repo.get_entity(resource_id)
+        if entity and (entity.user_id == current_user.id or getattr(current_user, 'is_admin', False)):
+            return True
+    
+    # 如果是关系相关的权限检查
     elif resource_type == "relation":
-        # 关系所有权验证
-        return True
+        relation = await knowledge_repo.get_relation(resource_id)
+        if relation and (relation.user_id == current_user.id or getattr(current_user, 'is_admin', False)):
+            return True
     
     raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="无效的资源类型"
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="无权访问此资源"
     )
 
 
 async def validate_knowledge_permission(
-    operation: str,
-    resource_type: Optional[str] = None,
-    resource_id: Optional[str] = None,
-    current_user: User = Depends(get_current_active_user)
-) -> User:
-    """验证知识图谱操作权限"""
-    # 管理员拥有所有权限
-    if current_user.is_admin:
-        return current_user
+    entity_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    验证知识实体访问权限
     
-    # 根据操作类型和资源类型验证权限
-    if operation in ["read", "search", "visualize"]:
-        # 读取类操作，根据资源所有权验证
-        if resource_id and resource_type:
-            await validate_resource_ownership(resource_id, resource_type, current_user)
-    elif operation in ["create", "update", "delete"]:
-        # 修改类操作，普通用户只能修改自己创建的资源
-        if resource_id and resource_type:
-            await validate_resource_ownership(resource_id, resource_type, current_user)
-    else:
+    依赖:
+        entity_id: 实体ID（路径参数）
+        current_user: 当前用户
+        
+    返回:
+        实体或关系对象
+        
+    异常:
+        HTTPException: 404 - 实体不存在
+        HTTPException: 403 - 无权访问
+    """
+    from src.repositories.knowledge_repository import KnowledgeRepository
+    knowledge_repo = KnowledgeRepository()
+    
+    # 尝试获取实体
+    entity = await knowledge_repo.get_entity(entity_id)
+    if entity:
+        # 管理员可以访问所有
+        if getattr(current_user, 'is_admin', False):
+            return entity
+        # 用户只能访问自己的
+        if hasattr(entity, "user_id") and entity.user_id == current_user.id:
+            return entity
+        elif isinstance(entity, dict) and entity.get("user_id") == current_user.id:
+            return entity
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="无效的操作类型"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问此知识实体"
         )
     
-    return current_user
-
-
-async def get_pagination_params(
-    skip: int = 0,
-    limit: int = 100
-) -> dict:
-    """获取分页参数"""
-    # 验证分页参数
-    skip = max(0, skip)  # 确保skip >= 0
-    limit = max(1, min(1000, limit))  # 限制limit在1-1000之间
+    # 尝试获取关系
+    relation = await knowledge_repo.get_relation(entity_id)
+    if relation:
+        # 管理员可以访问所有
+        if getattr(current_user, 'is_admin', False):
+            return relation
+        # 用户只能访问自己的
+        if hasattr(relation, "user_id") and relation.user_id == current_user.id:
+            return relation
+        elif isinstance(relation, dict) and relation.get("user_id") == current_user.id:
+            return relation
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问此关系"
+        )
     
-    return {
-        "skip": skip,
-        "limit": limit
-    }
-
-
-# 保留原始的validate_knowledge_permission函数用于向后兼容
-async def validate_knowledge_permission_legacy(
-    entity_or_relation: Dict[str, Any], 
-    user: Any, 
-    document_repo=None
-) -> bool:
-    """
-    验证用户是否有权限访问知识实体或关系（向后兼容）
-    
-    Args:
-        entity_or_relation: 实体或关系信息
-        user: 用户信息
-        document_repo: 文档仓库实例
-        
-    Returns:
-        bool: 是否有权限
-    """
-    # 管理员可以访问所有知识
-    is_admin = getattr(user, "is_admin", user.get("is_admin", False))
-    if is_admin:
-        return True
-    
-    # 如果没有关联文档，检查创建者
-    if "document_id" not in entity_or_relation:
-        user_id = getattr(user, "id", user.get("id"))
-        return entity_or_relation.get("created_by") == user_id or entity_or_relation.get("user_id") == user_id
-    
-    # 延迟导入避免循环依赖
-    if document_repo is None:
-        from repositories.document_repository import document_repository
-        document_repo = document_repository
-    
-    # 检查关联文档的权限
-    document_id = entity_or_relation["document_id"]
-    document = await document_repo.find_by_id(document_id)
-    
-    if not document:
-        return False
-    
-    user_id = getattr(user, "id", user.get("id"))
-    return document.get("created_by") == user_id or document.get("user_id") == user_id
+    # 都不存在
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="知识实体或关系不存在"
+    )

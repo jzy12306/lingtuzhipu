@@ -20,9 +20,9 @@ class UserCreate(BaseModel):
     role: UserRole = Field(default=UserRole.USER, description="用户角色")
     
     @validator('username')
-    def username_alphanumeric(cls, v):
-        if not re.match(r'^[a-zA-Z0-9_]+$', v):
-            raise ValueError('用户名只能包含字母、数字和下划线')
+    def username_valid(cls, v):
+        if not re.match(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', v):
+            raise ValueError('用户名只能包含字母、数字、下划线和中文')
         return v
     
     @validator('password')
@@ -54,9 +54,10 @@ class UserResponse(BaseModel):
     id: str = Field(..., description="用户ID")
     username: str = Field(..., description="用户名")
     email: str = Field(..., description="邮箱地址")
-    role: UserRole = Field(..., description="用户角色")
-    created_at: str = Field(..., description="创建时间")
-    updated_at: str = Field(..., description="更新时间")
+    role: UserRole = Field(default=UserRole.USER, description="用户角色")
+    is_admin: bool = Field(default=False, description="是否为管理员")
+    created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
+    updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
     
     class Config:
         from_attributes = True  # Pydantic V2 语法，允许从ORM对象创建
@@ -82,13 +83,28 @@ class TokenData(BaseModel):
     role: Optional[UserRole] = None
 
 
+# 验证码模型
+class VerificationCode(BaseModel):
+    email: EmailStr = Field(..., description="邮箱地址")
+    code: str = Field(..., description="验证码")
+    expires_at: datetime = Field(..., description="过期时间")
+
+
+# MFA验证请求模型
+class MfaVerifyRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6, description="MFA验证码")
+
+
 # User模型（数据库模型的Pydantic表示）
 class User(BaseModel):
     id: str = Field(..., description="用户ID")
     username: str = Field(..., description="用户名")
     email: str = Field(..., description="邮箱地址")
-    password_hash: str = Field(..., description="密码哈希值")
+    password_hash: Optional[str] = Field(None, description="密码哈希值")
+    hashed_password: Optional[str] = Field(None, description="密码哈希值（兼容字段）")
+    password: Optional[str] = Field(None, description="密码（兼容字段）")
     role: UserRole = Field(default=UserRole.USER, description="用户角色")
+    is_admin: bool = Field(default=False, description="是否为管理员")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
     is_active: bool = Field(default=True, description="是否活跃")

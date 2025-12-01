@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -57,12 +57,15 @@ class Settings(BaseSettings):
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 52428800  # 50MB
-    ALLOWED_EXTENSIONS: str = "pdf,docx,doc,txt,md,html,jpg,jpeg,png,xlsx,xls,csv"
+    ALLOWED_EXTENSIONS: Union[str, List[str]] = "pdf,docx,doc,txt,md,html,jpg,jpeg,png,xlsx,xls,csv"
     
     @property
     def allowed_extensions_list(self) -> List[str]:
-        return [f".{ext.strip()}" if not ext.strip().startswith(".") else ext.strip() 
-                for ext in self.ALLOWED_EXTENSIONS.split(",")]
+        extensions = self.ALLOWED_EXTENSIONS
+        if isinstance(extensions, str):
+            return [f".{ext.strip()}" if not ext.strip().startswith(".") else ext.strip() 
+                    for ext in extensions.split(",")]
+        return extensions
     
     class Config:
         env_file = ".env"

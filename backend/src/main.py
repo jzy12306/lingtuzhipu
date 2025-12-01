@@ -9,6 +9,8 @@ import sys
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+import asyncio
+from typing import Optional
 
 # 加载.env文件
 load_dotenv()
@@ -18,6 +20,8 @@ from src.services.service_factory import ServiceFactory, UserCreate
 from src.core.security import get_password_hash
 from src.routes.router_manager import router_manager
 from src.middleware.rate_limiter import RateLimitMiddleware
+from src.core.performance import initialize_config
+from collections import deque
 
 # 初始化服务工厂实例
 service_factory = ServiceFactory()
@@ -42,10 +46,17 @@ uvicorn_access_logger = logging.getLogger('uvicorn.access')
 uvicorn_access_logger.setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# API统计缓存队列
+_api_stats_queue: deque = deque()
+_stats_queue_lock = asyncio.Lock()
+_stats_flush_task: Optional[asyncio.Task] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    global _stats_flush_task
+    
     # 启动时执行
     logger.info("正在初始化应用...")
     
@@ -54,47 +65,59 @@ async def lifespan(app: FastAPI):
         await service_factory.initialize_all()
         logger.info("所有服务初始化成功")
     except Exception as e:
-        logger.error(f"服务初始化失败: {str(e)}")
+        logger.error(f"服务初始化失败: {str(e)}", exc_info=True)
+        raise
+    
+    # 从数据库加载配置
+    try:
+        await initialize_config()
+        logger.info("配置初始化成功")
+    except Exception as e:
+        logger.error(f"配置初始化失败: {str(e)}", exc_info=True)
+        raise
+    
+    # 启动API统计批量写入任务
+    try:
+        _stats_flush_task = asyncio.create_task(flush_api_stats())
+        logger.info("API统计批量写入任务已启动")
+    except Exception as e:
+        logger.error(f"启动API统计任务失败: {str(e)}", exc_info=True)
         raise
     
     # 创建默认管理员用户（如果不存在）
     try:
         admin_username = os.getenv("ADMIN_USERNAME", "admin")
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        admin_password = os.getenv("ADMIN_PASSWORD", "admin123456")
+        admin_password = os.getenv("ADMIN_PASSWORD")
         
-        # 检查管理员用户是否存在
-        try:
-            existing_admin = await service_factory.user_repository.find_by_username(admin_username)
-        except Exception as e:
-            logger.error(f"查询管理员用户失败: {str(e)}")
-            existing_admin = None
-        
-        if not existing_admin:
-            try:
-                # 使用security模块中的get_password_hash函数
-                # 现在它使用pbkdf2_sha256算法，没有72字节的限制
-                hashed_password = get_password_hash(admin_password)
-                
-                # 为管理员生成哈希密码并以hashed_password字段保存
-                hashed_password = get_password_hash(admin_password)
-                admin_dict = {
-                    "username": admin_username,
-                    "email": admin_email,
-                    "hashed_password": hashed_password,
-                    "is_active": True,
-                    "is_admin": True,
-                    "email_verified": True,
-                }
-                await service_factory.user_repository.create(admin_dict)
-                logger.info(f"默认管理员用户 {admin_username} 创建成功")
-            except Exception as e:
-                logger.error(f"创建管理员用户失败: {str(e)}")
-                # 打印详细的异常信息，帮助调试
-                logger.error(f"异常类型: {type(e).__name__}")
-                logger.error(f"异常详情: {repr(e)}")
+        # 如果没有设置管理员密码，跳过创建
+        if not admin_password:
+            logger.warning("未设置ADMIN_PASSWORD环境变量，跳过默认管理员创建")
         else:
-            logger.info(f"管理员用户 {admin_username} 已存在")
+            # 检查管理员用户是否存在
+            try:
+                existing_admin = await service_factory.user_repository.find_by_username(admin_username)
+            except Exception as e:
+                logger.error(f"查询管理员用户失败: {str(e)}")
+                existing_admin = None
+            
+            if not existing_admin:
+                try:
+                    hashed_password = get_password_hash(admin_password)
+                    admin_dict = {
+                        "username": admin_username,
+                        "email": admin_email,
+                        "hashed_password": hashed_password,
+                        "is_active": True,
+                        "is_admin": True,
+                        "email_verified": True,
+                    }
+                    await service_factory.user_repository.create(admin_dict)
+                    logger.info(f"默认管理员用户 {admin_username} 创建成功")
+                except Exception as e:
+                    logger.error(f"创建管理员用户失败: {str(e)}")
+            else:
+                logger.info(f"管理员用户 {admin_username} 已存在")
     except Exception as e:
         logger.error(f"创建默认管理员失败: {str(e)}")
     
@@ -102,6 +125,15 @@ async def lifespan(app: FastAPI):
     
     # 关闭时执行
     logger.info("正在关闭应用...")
+    
+    # 取消API统计任务
+    if _stats_flush_task:
+        _stats_flush_task.cancel()
+        try:
+            await _stats_flush_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("API统计批量写入任务已停止")
     
     # 使用服务工厂关闭所有服务
     try:
@@ -132,7 +164,7 @@ app.add_middleware(
 # API调用统计中间件
 @app.middleware("http")
 async def api_stats_middleware(request: Request, call_next):
-    """API调用统计中间件"""
+    """API调用统计中间件（批量优化版）"""
     # 记录请求开始时间
     start_time = time.time()
     
@@ -150,7 +182,7 @@ async def api_stats_middleware(request: Request, call_next):
     # 获取响应状态码
     status_code = response.status_code
     
-    # 记录API调用统计
+    # 记录API调用统计到缓存队列
     try:
         # 构建统计数据
         stats_data = {
@@ -160,13 +192,12 @@ async def api_stats_middleware(request: Request, call_next):
             "process_time": process_time,
             "client_ip": client_ip,
             "timestamp": datetime.utcnow(),
-            "date": datetime.utcnow().date()
+            "date": datetime.utcnow().date().isoformat()
         }
         
-        # 保存到MongoDB
-        mongodb = await service_factory.db_service.get_mongodb()
-        if mongodb is not None:
-            await mongodb.api_stats.insert_one(stats_data)
+        # 添加到缓存队列（非阻塞）
+        async with _stats_queue_lock:
+            _api_stats_queue.append(stats_data)
         
         # 记录日志
         logger.info(f"API调用: {method} {path} {status_code} {process_time:.3f}s {client_ip}")
@@ -179,6 +210,31 @@ async def api_stats_middleware(request: Request, call_next):
     
     return response
 
+# 批量写入统计数据的异步函数
+async def flush_api_stats():
+    """定期将缓存的API统计批量写入数据库"""
+    while True:
+        try:
+            await asyncio.sleep(30)  # 每30秒刷新一次
+            
+            async with _stats_queue_lock:
+                if not _api_stats_queue:
+                    continue
+                
+                # 复制队列数据并清空
+                stats_batch = list(_api_stats_queue)
+                _api_stats_queue.clear()
+            
+            if stats_batch:
+                mongodb = await service_factory.db_service.get_mongodb()
+                if mongodb is not None:
+                    await mongodb.api_stats.insert_many(stats_batch)
+                    logger.info(f"批量写入 {len(stats_batch)} 条API统计记录")
+                    
+        except Exception as e:
+            logger.error(f"批量写入API统计失败: {str(e)}")
+
+
 # 添加速率限制中间件
 app.add_middleware(RateLimitMiddleware)
 
@@ -188,10 +244,36 @@ app.include_router(router_manager.main_router)
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception):
     """全局异常处理器"""
     logger.error(f"全局异常: {str(exc)}", exc_info=True)
-    return {"detail": "服务器内部错误"}
+    
+    # 根据不同异常类型返回不同的状态码
+    if isinstance(exc, ValueError):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc), "error_type": "ValueError"}
+        )
+    elif isinstance(exc, KeyError):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "请求数据不完整", "error_type": "KeyError"}
+        )
+    elif isinstance(exc, PermissionError):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "权限不足", "error_type": "PermissionError"}
+        )
+    else:
+        # 对于未预见的异常，返回500错误
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "服务器内部错误", 
+                "error_type": type(exc).__name__,
+                "message": str(exc) if os.getenv("DEBUG") else "请联系管理员"
+            }
+        )
 
 
 @app.get("/")
@@ -202,6 +284,14 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs",
         "redoc": "/redoc"
+    }
+
+
+@app.get("/api/routes")
+async def get_routes():
+    """获取所有注册的路由信息"""
+    return {
+        "routes": router_manager.get_routes_info()
     }
 
 

@@ -4,7 +4,7 @@ import logging
 
 from src.utils.dependencies import get_current_user, get_current_active_user
 from src.schemas.user import User
-from src.routes import auth, documents, knowledge, health, analyst, approval
+from src.routes import auth, documents, knowledge, health, analyst, approval, agent, users, system, config
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,8 @@ class RouterManager:
         self.health_router = APIRouter(prefix="/health", tags=["health"])
         self.analyst_router = APIRouter(prefix="/analyst", tags=["analyst"])
         self.approval_router = APIRouter(prefix="/approval", tags=["approval"])
+        self.agent_router = APIRouter(prefix="/agents", tags=["agents"])
+        self.users_router = APIRouter(prefix="/users", tags=["users"])
     
     def register_all_routes(self):
         """注册所有路由"""
@@ -36,6 +38,10 @@ class RouterManager:
             self._register_health_routes()
             self._register_analyst_routes()
             self._register_approval_routes()
+            self._register_agent_routes()
+            self._register_user_routes()
+            self._register_config_routes()
+            self._register_system_routes()
             
             logger.info("所有API路由注册完成")
             
@@ -135,6 +141,60 @@ class RouterManager:
             
         except Exception as e:
             logger.error(f"审批路由注册失败: {str(e)}")
+            raise
+    
+    def _register_agent_routes(self):
+        """注册智能体相关路由"""
+        try:
+            # 直接注册agent模块的路由（agent.router已经包含了/api/agents前缀）
+            self.main_router.include_router(
+                agent.router,
+                dependencies=[Depends(get_current_active_user)]
+            )
+            
+            logger.info("智能体路由注册完成")
+            
+        except Exception as e:
+            logger.error(f"智能体路由注册失败: {str(e)}")
+            raise
+    
+    def _register_user_routes(self):
+        """注册用户相关路由"""
+        try:
+            # 直接注册users模块的路由（users.router已经包含了/api/users前缀）
+            # 移除全局认证依赖，让每个路由自己决定是否需要认证
+            self.main_router.include_router(users.router)
+            
+            logger.info("用户路由注册完成")
+            
+        except Exception as e:
+            logger.error(f"用户路由注册失败: {str(e)}")
+            raise
+    
+    def _register_config_routes(self):
+        """注册配置相关路由"""
+        try:
+            # 直接注册config模块的路由（config.router已经包含了/api/config前缀）
+            # 移除全局认证依赖，让每个路由自己决定是否需要认证
+            self.main_router.include_router(config.router)
+            
+            logger.info("配置路由注册完成")
+            
+        except Exception as e:
+            logger.error(f"配置路由注册失败: {str(e)}")
+            raise
+    
+    def _register_system_routes(self):
+        """注册系统相关路由"""
+        try:
+            # 直接注册system模块的路由（system.router已经包含了/api/system前缀）
+            # 移除全局认证依赖，让每个路由自己决定是否需要认证
+            self.main_router.include_router(system.router)
+            
+            logger.info("系统路由注册完成")
+            
+        except Exception as e:
+            logger.error(f"系统路由注册失败: {str(e)}")
             raise
     
     def get_routes_info(self) -> List[Dict[str, any]]:

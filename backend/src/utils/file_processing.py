@@ -62,25 +62,50 @@ async def process_pdf(file_stream: io.BytesIO) -> str:
             file_stream.seek(0)
             # 使用OCR服务识别PDF
             ocr_result = await ocr_service.recognize_pdf_stream(file_stream)
-            logger.info(f"OCR调用结果: {ocr_result.get('errorCode')} - {ocr_result.get('errorMsg', '成功')}")
+            logger.info(f"OCR调用结果: {ocr_result}")
             
-            # 解析OCR结果
-            if ocr_result.get('errorCode') == '0':
-                ocr_text = []
-                regions = ocr_result.get('regions', [])
-                logger.info(f"OCR识别到的区域数量: {len(regions)}")
-                for region in regions:
-                    lines = region.get('lines', [])
-                    for line in lines:
-                        words = line.get('words', [])
-                        for word in words:
-                            ocr_text.append(word.get('text', ''))
-                ocr_extracted_text = clean_text(' '.join(ocr_text))
-                logger.info(f"OCR识别文本长度: {len(ocr_extracted_text.strip())}字符")
-                
-                # 如果OCR识别到了文本，使用OCR结果
-                if len(ocr_extracted_text.strip()) > 0:
-                    return ocr_extracted_text
+            # 解析OCR结果 - 增强版，支持多种返回格式
+            ocr_text = []
+            
+            # 检查OCR结果格式
+            if isinstance(ocr_result, dict):
+                # 处理有道智云OCR API返回格式
+                if 'regions' in ocr_result:
+                    # 标准格式，包含regions字段
+                    regions = ocr_result.get('regions', [])
+                    logger.info(f"OCR识别到的区域数量: {len(regions)}")
+                    for region in regions:
+                        lines = region.get('lines', [])
+                        for line in lines:
+                            words = line.get('words', [])
+                            for word in words:
+                                ocr_text.append(word.get('text', ''))
+                elif 'Result' in ocr_result:
+                    # 有道智云OCR API可能返回的格式
+                    result_text = ocr_result.get('Result', '')
+                    logger.info(f"OCR识别到的文本: {result_text}")
+                    ocr_text.append(result_text)
+                elif 'content' in ocr_result:
+                    # 自定义格式，包含content字段
+                    content_text = ocr_result.get('content', '')
+                    logger.info(f"OCR识别到的内容: {content_text}")
+                    ocr_text.append(content_text)
+                else:
+                    # 其他格式，尝试直接获取文本
+                    logger.warning(f"未知的OCR结果格式: {ocr_result.keys()}")
+                    # 尝试将整个结果转换为字符串
+                    ocr_text.append(str(ocr_result))
+            else:
+                # 非字典格式，直接转换为字符串
+                logger.warning(f"OCR结果不是字典格式: {type(ocr_result)}")
+                ocr_text.append(str(ocr_result))
+            
+            ocr_extracted_text = clean_text(' '.join(ocr_text))
+            logger.info(f"OCR识别文本长度: {len(ocr_extracted_text.strip())}字符")
+            
+            # 如果OCR识别到了文本，使用OCR结果
+            if len(ocr_extracted_text.strip()) > 0:
+                return ocr_extracted_text
         
         return extracted_text
         
@@ -92,27 +117,51 @@ async def process_pdf(file_stream: io.BytesIO) -> str:
             file_stream.seek(0)
             # 使用OCR服务识别PDF
             ocr_result = await ocr_service.recognize_pdf_stream(file_stream)
-            logger.info(f"OCR调用结果: {ocr_result.get('errorCode')} - {ocr_result.get('errorMsg', '成功')}")
+            logger.info(f"OCR调用结果: {ocr_result}")
             
-            # 解析OCR结果
-            if ocr_result.get('errorCode') == '0':
-                ocr_text = []
-                regions = ocr_result.get('regions', [])
-                logger.info(f"OCR识别到的区域数量: {len(regions)}")
-                for region in regions:
-                    lines = region.get('lines', [])
-                    for line in lines:
-                        words = line.get('words', [])
-                        for word in words:
-                            ocr_text.append(word.get('text', ''))
-                ocr_extracted_text = clean_text(' '.join(ocr_text))
-                logger.info(f"OCR识别文本长度: {len(ocr_extracted_text.strip())}字符")
-                return ocr_extracted_text
+            # 解析OCR结果 - 增强版，支持多种返回格式
+            ocr_text = []
+            
+            # 检查OCR结果格式
+            if isinstance(ocr_result, dict):
+                # 处理有道智云OCR API返回格式
+                if 'regions' in ocr_result:
+                    # 标准格式，包含regions字段
+                    regions = ocr_result.get('regions', [])
+                    logger.info(f"OCR识别到的区域数量: {len(regions)}")
+                    for region in regions:
+                        lines = region.get('lines', [])
+                        for line in lines:
+                            words = line.get('words', [])
+                            for word in words:
+                                ocr_text.append(word.get('text', ''))
+                elif 'Result' in ocr_result:
+                    # 有道智云OCR API可能返回的格式
+                    result_text = ocr_result.get('Result', '')
+                    logger.info(f"OCR识别到的文本: {result_text}")
+                    ocr_text.append(result_text)
+                elif 'content' in ocr_result:
+                    # 自定义格式，包含content字段
+                    content_text = ocr_result.get('content', '')
+                    logger.info(f"OCR识别到的内容: {content_text}")
+                    ocr_text.append(content_text)
+                else:
+                    # 其他格式，尝试直接获取文本
+                    logger.warning(f"未知的OCR结果格式: {ocr_result.keys()}")
+                    # 尝试将整个结果转换为字符串
+                    ocr_text.append(str(ocr_result))
             else:
-                raise Exception(f"OCR识别失败: {ocr_result.get('errorMsg', '未知错误')}")
+                # 非字典格式，直接转换为字符串
+                logger.warning(f"OCR结果不是字典格式: {type(ocr_result)}")
+                ocr_text.append(str(ocr_result))
+            
+            ocr_extracted_text = clean_text(' '.join(ocr_text))
+            logger.info(f"OCR识别文本长度: {len(ocr_extracted_text.strip())}字符")
+            return ocr_extracted_text
         except Exception as ocr_e:
             logger.error(f"OCR尝试也失败: {str(ocr_e)}")
-            raise Exception(f"处理PDF文件失败: {str(e)}，OCR尝试也失败: {str(ocr_e)}")
+            # 即使OCR失败，也返回原始提取的文本
+            return extracted_text
 
 
 async def process_text(file_stream: io.BytesIO) -> str:
@@ -292,29 +341,60 @@ async def process_image(file_stream: io.BytesIO, content_type: str) -> str:
         OCR识别的文本内容
     """
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # 重置文件流位置
         file_stream.seek(0)
         
         # 直接使用文件流调用OCR服务
         ocr_result = await ocr_service.recognize_image_stream(file_stream)
+        logger.info(f"图片OCR调用结果: {ocr_result}")
         
-        # 解析OCR结果
-        if ocr_result.get('errorCode') == '0':
-            # 提取文本内容
-            text_content = []
-            regions = ocr_result.get('regions', [])
-            for region in regions:
-                lines = region.get('lines', [])
-                for line in lines:
-                    words = line.get('words', [])
-                    for word in words:
-                        text_content.append(word.get('text', ''))
-            return clean_text(' '.join(text_content))
+        # 解析OCR结果 - 增强版，支持多种返回格式
+        text_content = []
+        
+        # 检查OCR结果格式
+        if isinstance(ocr_result, dict):
+            # 处理有道智云OCR API返回格式
+            if 'regions' in ocr_result:
+                # 标准格式，包含regions字段
+                regions = ocr_result.get('regions', [])
+                logger.info(f"图片OCR识别到的区域数量: {len(regions)}")
+                for region in regions:
+                    lines = region.get('lines', [])
+                    for line in lines:
+                        words = line.get('words', [])
+                        for word in words:
+                            text_content.append(word.get('text', ''))
+            elif 'Result' in ocr_result:
+                # 有道智云OCR API可能返回的格式
+                result_text = ocr_result.get('Result', '')
+                logger.info(f"图片OCR识别到的文本: {result_text}")
+                text_content.append(result_text)
+            elif 'content' in ocr_result:
+                # 自定义格式，包含content字段
+                content_text = ocr_result.get('content', '')
+                logger.info(f"图片OCR识别到的内容: {content_text}")
+                text_content.append(content_text)
+            else:
+                # 其他格式，尝试直接获取文本
+                logger.warning(f"未知的图片OCR结果格式: {ocr_result.keys()}")
+                # 尝试将整个结果转换为字符串
+                text_content.append(str(ocr_result))
         else:
-            raise Exception(f"OCR识别失败: {ocr_result.get('errorMsg', '未知错误')}")
+            # 非字典格式，直接转换为字符串
+            logger.warning(f"图片OCR结果不是字典格式: {type(ocr_result)}")
+            text_content.append(str(ocr_result))
+        
+        recognized_text = clean_text(' '.join(text_content))
+        logger.info(f"图片OCR识别文本长度: {len(recognized_text.strip())}字符")
+        return recognized_text
             
     except Exception as e:
-        raise Exception(f"处理图片文件失败: {str(e)}")
+        logger.error(f"处理图片文件失败: {str(e)}")
+        # 即使处理失败，也返回空字符串，避免整个流程中断
+        return ""
 
 
 async def process_uploaded_file(file) -> tuple[str, str]:
@@ -331,9 +411,6 @@ async def process_uploaded_file(file) -> tuple[str, str]:
     file_stream = io.BytesIO(await file.read())
     content_type = file.content_type
     
-    # 保存文件流位置，以便后续重新读取
-    file_stream.seek(0)
-    
     # 根据文件名获取文件类型
     file_extension = ''
     if file.filename:
@@ -341,33 +418,49 @@ async def process_uploaded_file(file) -> tuple[str, str]:
     
     # 根据文件扩展名和内容类型选择处理器
     if file_extension == 'pdf' or content_type == 'application/pdf':
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_pdf(file_stream)
         return text_content, 'pdf'
     elif file_extension == 'txt' or content_type == 'text/plain':
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_text(file_stream)
         return text_content, 'txt'
     elif file_extension == 'md' or content_type == 'text/markdown':
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_text(file_stream)
-        return text_content, 'markdown'
+        return text_content, 'txt'  # 将markdown类型统一为txt
     elif file_extension == 'csv' or content_type == 'text/csv':
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_csv(file_stream)
         return text_content, 'txt'  # CSV文件作为txt处理
     elif file_extension in ['xls', 'xlsx'] or content_type in [
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ]:
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_excel(file_stream)
         return text_content, 'txt'  # Excel文件作为txt处理
     elif file_extension == 'docx' or content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_docx(file_stream)
         return text_content, 'docx'
     elif file_extension in ['jpg', 'jpeg', 'png'] or content_type in ['image/jpeg', 'image/png', 'image/jpg']:
         # 图片文件，使用OCR识别
+        # 在调用处理器函数之前重置文件流位置
+        file_stream.seek(0)
         text_content = await process_image(file_stream, content_type)
         return text_content, 'txt'  # 图片OCR结果作为txt处理
     else:
         # 对于无法识别的文件类型，尝试作为文本处理
         try:
+            # 在调用处理器函数之前重置文件流位置
+            file_stream.seek(0)
             text_content = await process_text(file_stream)
             return text_content, 'txt'
         except Exception as e:

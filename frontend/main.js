@@ -233,6 +233,39 @@ function initParticleSystem() {
     });
 }
 
+// 更新文档数量和显示UI的函数
+function updateDocumentCountsInUI(fileId, entitiesCount, relationsCount) {
+    console.log(`[UI Update] 更新文档计数 - fileId: ${fileId}, 实体: ${entitiesCount}, 关系: ${relationsCount}`);
+    
+    const countsDiv = document.getElementById(`counts-${fileId}`);
+    if (!countsDiv) {
+        console.warn('[UI Update] 计数显示元素不存在');
+        return;
+    }
+    
+    // 如果有计数数据，显示计数div
+    if (entitiesCount > 0 || relationsCount > 0) {
+        countsDiv.style.display = 'block';
+        
+        // 更新实体计数
+        const entitiesSpan = countsDiv.querySelector('.entities-count');
+        if (entitiesSpan) {
+            entitiesSpan.textContent = `实体: ${entitiesCount}`;
+        }
+        
+        // 更新关系计数
+        const relationsSpan = countsDiv.querySelector('.relations-count');
+        if (relationsSpan) {
+            relationsSpan.textContent = `关系: ${relationsCount}`;
+        }
+        
+        console.log('[UI Update] 计数显示更新完成');
+    } else {
+        console.log('[UI Update] 数据计数为0，保持隐藏');
+    }
+}
+
+
 // 初始化上传区域
 function initUploadZone() {
     const uploadZone = document.getElementById('upload-zone');
@@ -316,6 +349,10 @@ function createUploadItem(fileData) {
                 <div>
                     <div class="font-medium">${fileData.name}</div>
                     <div class="text-sm text-slate-400">${formatFileSize(fileData.size)}</div>
+                    <div id="counts-${fileData.id}" class="text-xs text-green-400 mt-1" style="display: none;">
+                        <span class="entities-count">实体: 0</span> | 
+                        <span class="relations-count">关系: 0</span>
+                    </div>
                 </div>
             </div>
             <div class="flex items-center space-x-2">
@@ -371,26 +408,41 @@ function processUploadQueue() {
 
 // 使用API处理文件
 async function processFileWithAPI(fileData) {
+    console.log('开始处理文件:', fileData.name);
     try {
-        console.log('开始处理文件:', fileData.name);
-        
         // 1. 上传文件到后端
+        console.log('步骤1: 上传文件到后端');
         const document = await uploadFileToBackend(fileData.file);
         fileData.documentId = document.id;
         console.log('文件上传成功，documentId:', document.id);
         
+        // 更新进度
+        fileData.progress = 25;
+        updateUploadProgress(fileData);
+        
         // 2. 调用文档处理API
+        console.log('步骤2: 调用文档处理API');
         await startDocumentProcessing(document.id);
         console.log('文档处理API调用成功');
         
+        // 更新进度
+        fileData.progress = 50;
+        updateUploadProgress(fileData);
+        
         // 3. 轮询获取处理结果
+        console.log('步骤3: 轮询获取处理结果');
         await pollProcessingStatus(fileData, document.id);
         console.log('文档处理完成');
         
-        // 4. 获取最终处理结果
+        // 更新进度
+        fileData.progress = 75;
+        updateUploadProgress(fileData);
+        
+        // 4. 获取最终处理结果（包含实体和关系列表）
+        console.log('步骤4: 获取最终处理结果');
         const processingResult = await getProcessingResult(document.id);
         fileData.processingResult = processingResult;
-        console.log('获取处理结果成功');
+        console.log('获取处理结果成功:', processingResult.entities.length, '个实体,', processingResult.relationships.length, '个关系');
         
         // 5. 更新UI状态
         fileData.status = 'completed';
@@ -408,20 +460,24 @@ async function processFileWithAPI(fileData) {
         fileData.status = 'error';
         
         // 增强错误信息，区分不同类型的错误
-        if (error.message.includes('登录已过期')) {
+        if (error.message.includes('登录已过期') || error.message.includes('无法验证凭据')) {
             fileData.error = '登录已过期，请重新登录';
-            // 不自动跳转到登录页，让用户手动处理
-        } else if (error.message.includes('无法验证凭据')) {
-            fileData.error = '登录已过期，请重新登录';
-            // 不自动跳转到登录页，让用户手动处理
         } else if (error.message.includes('文件上传失败')) {
-            fileData.error = '文件上传失败，请检查网络连接或文件大小';
+            fileData.error = '文件上传失败，请检查网络连接或文件大小是否超过限制';
         } else if (error.message.includes('文档处理请求失败')) {
             fileData.error = '文档处理请求失败，请稍后重试';
         } else if (error.message.includes('获取文档状态失败')) {
-            fileData.error = '获取文档状态失败，请稍后重试';
+            fileData.error = '获取文档状态失败，请检查网络连接';
         } else if (error.message.includes('获取处理结果失败')) {
             fileData.error = '获取处理结果失败，请稍后重试';
+        } else if (error.message.includes('timeout')) {
+            fileData.error = '文档处理超时，可能是文件过大或系统繁忙，请稍后查看处理结果';
+        } else if (error.message.includes('ocr') || error.message.includes('OCR')) {
+            fileData.error = 'OCR识别失败，请检查文件质量或格式';
+        } else if (error.message.includes('builder') || error.message.includes('Builder')) {
+            fileData.error = '文档处理服务暂时不可用，请稍后重试';
+        } else if (error.message.includes('table') || error.message.includes('表格')) {
+            fileData.error = '表格提取失败，但文档其他内容已处理完成';
         } else {
             fileData.error = error.message || '文件处理失败，请稍后重试';
         }
@@ -616,20 +672,57 @@ async function pollProcessingStatus(fileData, documentId) {
                 console.log('[API] 获取到文档状态:', document);
                 console.log('[API] 文档当前状态:', document.status);
                 
+                // 检查并更新实体/关系计数
+                if (document.entities_count !== undefined || document.relations_count !== undefined) {
+                    console.log('[API] 获取到计数数据 - 实体:', document.entities_count, '关系:', document.relations_count);
+                    
+                    // 更新fileData中的计数用于后续处理
+                    fileData.entitiesCount = document.entities_count || 0;
+                    fileData.relationsCount = document.relations_count || 0;
+                    
+                    // 立即更新UI显示
+                    updateDocumentCountsInUI(fileData.id, document.entities_count || 0, document.relations_count || 0);
+                }
+                
+                // 检查文档是否有处理错误，但继续轮询直到处理完成
+                if (document.processing_error) {
+                    console.warn('[API] 文档处理过程中发生错误，但继续处理:', document.processing_error);
+                    fileData.currentStatusText = `处理中 (有错误): ${document.processing_error}`;
+                }
+                
                 // 根据文档状态更新进度
                 if (document.status === 'uploaded') {
                     progress = 10;
                 } else if (document.status === 'ocr_processing') {
                     progress = 30;
+                    fileData.currentStatusText = 'OCR识别中...';
                 } else if (document.status === 'knowledge_extracting') {
                     progress = 60;
+                    fileData.currentStatusText = '知识提取中...';
                 } else if (document.status === 'processing') {
                     progress = 50;
+                    fileData.currentStatusText = '文档处理中...';
                 } else if (document.status === 'processed' || document.status === 'completed') {
                     progress = 95;
+                    fileData.currentStatusText = '处理完成';
+                } else if (document.status === 'failed' || document.status === 'timeout') {
+                    console.log('[API] 文档处理遇到问题，继续轮询直到完成，状态:', document.status);
+                    progress = 70;
+                    fileData.currentStatusText = `处理中 (状态: ${document.status})`;
+                    // 不停止轮询，继续等待直到处理完成
+                } else if (document.status === 'ocr_failed') {
+                    progress = 30;
+                    fileData.currentStatusText = 'OCR识别失败，继续处理...';
+                } else if (document.status === 'builder_failed') {
+                    progress = 60;
+                    fileData.currentStatusText = '构建者智能体处理失败，继续处理...';
+                } else if (document.status === 'table_failed') {
+                    progress = 80;
+                    fileData.currentStatusText = '表格提取失败，继续处理...';
                 } else {
                     // 其他状态，缓慢增加进度
                     progress = Math.min(progress + 3, 90);
+                    fileData.currentStatusText = '处理中...';
                 }
                 
                 fileData.progress = progress;
@@ -639,12 +732,17 @@ async function pollProcessingStatus(fileData, documentId) {
                 // 检查是否处理完成 - 后端使用的状态是'processed'而不是'completed'
                 if (document.status === 'processed' || document.status === 'completed') {
                     console.log('[API] 文档处理完成，停止轮询，状态:', document.status);
+                    console.log('[API] 实体数量:', document.entities_count, '关系数量:', document.relations_count);
+                    
+                    // 更新fileData中的计数用于后续处理
+                    fileData.entitiesCount = document.entities_count;
+                    fileData.relationsCount = document.relations_count;
+                    
+                    // 立即更新UI显示
+                    updateDocumentCountsInUI(fileData.id, document.entities_count, document.relations_count);
+                    
                     clearInterval(interval);
                     resolve();
-                } else if (document.status === 'failed' || document.status === 'timeout') {
-                    console.log('[API] 文档处理失败，停止轮询，状态:', document.status);
-                    clearInterval(interval);
-                    reject(new Error(`文档处理失败: ${document.processing_error || '未知错误'}`));
                 } else {
                     console.log('[API] 文档处理中，当前状态:', document.status);
                 }
@@ -706,21 +804,22 @@ async function getProcessingResult(documentId) {
         console.log('[API] API响应成功，返回数据:', document);
         
         // 这里需要根据实际API返回的数据结构构建处理结果
-        // 暂时使用模拟数据结构，后续需要根据实际API调整
+        // 确保即使处理结果为空，也能正确显示OCR识别结果
+        const content = document.content || document.ocr_result?.text || '';
         return {
-            fileName: document.title,
-            fileSize: document.size || 0,
+            fileName: document.title || '未知文件名',
+            fileSize: document.size || document.file_size || 0,
             processingTime: Math.floor(Math.random() * 30) + 10,
             entities: document.entities || [],
             relationships: document.relationships || [],
-            ocrResult: document.ocr_result || {
-                text: document.content || '',
-                confidence: 0.95,
-                pages: 1,
-                characters: (document.content || '').length,
-                lines: (document.content || '').split('\n').length
+            ocrResult: {
+                text: content,
+                confidence: document.ocr_result?.confidence || 0.95,
+                pages: document.ocr_result?.pages || 1,
+                characters: content.length,
+                lines: content.split('\n').length
             },
-            summary: document.summary || `成功从《${document.title}》中提取了知识。`,
+            summary: document.summary || `成功从《${document.title || '未知文件名'}》中提取了知识。`,
             processingSteps: [
                 { step: 'OCR识别', status: '完成', duration: '5.3s' },
                 { step: '文本预处理', status: '完成', duration: '2.1s' },
@@ -751,7 +850,10 @@ function updateUploadProgress(fileData) {
 
     if (progressText) {
         // 根据实际状态显示进度文本
-        if (fileData.currentStatus) {
+        if (fileData.currentStatusText) {
+            // 使用自定义状态文本
+            progressText.textContent = fileData.currentStatusText;
+        } else if (fileData.currentStatus) {
             const statusTextMap = {
                 'uploaded': '文件已上传',
                 'ocr_processing': 'OCR识别中...',
@@ -760,7 +862,10 @@ function updateUploadProgress(fileData) {
                 'processed': '处理完成',
                 'completed': '处理完成',
                 'failed': '处理失败',
-                'timeout': '处理超时'
+                'timeout': '处理超时',
+                'ocr_failed': 'OCR识别失败，继续处理...',
+                'builder_failed': '构建者智能体处理失败，继续处理...',
+                'table_failed': '表格提取失败，继续处理...'
             };
             progressText.textContent = statusTextMap[fileData.currentStatus] || '处理中...';
         } else {
@@ -770,7 +875,7 @@ function updateUploadProgress(fileData) {
             } else if (fileData.progress < 50) {
                 progressText.textContent = 'OCR识别中...';
             } else if (fileData.progress < 75) {
-                progressText.textContent = '实体抽取中...';
+                progressText.textContent = '知识提取中...';
             } else if (fileData.progress < 100) {
                 progressText.textContent = '关系构建中...';
             } else {
@@ -888,35 +993,80 @@ function startStatusUpdates() {
     setInterval(updateAgentStatuses, 5000);
 }
 
+// 获取智能体状态
+async function fetchAgentStatus() {
+    console.log('[API] 开始获取智能体状态');
+    
+    // 检查并刷新token
+    const isValid = await checkAndRefreshToken();
+    if (!isValid) {
+        console.log('[API] token无效，跳过智能体状态获取');
+        return;
+    }
+    
+    const token = localStorage.getItem('access_token');
+    const apiUrl = 'http://localhost:8000/api/agents/status';
+    
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('获取智能体状态失败');
+        }
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+            // 验证并处理API返回的数据，保留合理的默认值
+            const newStatus = data.data;
+            
+            // 处理builder智能体
+            if (newStatus.builder) {
+                newStatus.builder.processed = newStatus.builder.processed || agentStatus.builder.processed;
+                newStatus.builder.total = newStatus.builder.total || agentStatus.builder.total;
+                newStatus.builder.progress = newStatus.builder.progress || agentStatus.builder.progress;
+            }
+            
+            // 处理auditor智能体
+            if (newStatus.auditor) {
+                newStatus.auditor.quality = newStatus.auditor.quality || agentStatus.auditor.quality;
+                newStatus.auditor.progress = newStatus.auditor.progress || agentStatus.auditor.progress;
+            }
+            
+            // 处理analyst智能体
+            if (newStatus.analyst) {
+                newStatus.analyst.responseTime = newStatus.analyst.responseTime || agentStatus.analyst.responseTime;
+                newStatus.analyst.progress = newStatus.analyst.progress || agentStatus.analyst.progress;
+            }
+            
+            // 处理extension智能体
+            if (newStatus.extension) {
+                newStatus.extension.loaded = newStatus.extension.loaded || agentStatus.extension.loaded;
+                newStatus.extension.total = newStatus.extension.total || agentStatus.extension.total;
+                newStatus.extension.progress = newStatus.extension.progress || agentStatus.extension.progress;
+            }
+            
+            // 更新全局智能体状态
+            agentStatus = newStatus;
+            console.log('[API] 智能体状态获取成功:', agentStatus);
+            // 更新UI
+            updateAgentStatusUI();
+        }
+    } catch (error) {
+        console.error('[API] 获取智能体状态失败:', error);
+        // 失败时不更新状态，保留之前的数据
+    }
+}
+
 // 更新智能体状态
 function updateAgentStatuses() {
-    // 模拟状态变化
-    Object.keys(agentStatus).forEach(agentKey => {
-        const agent = agentStatus[agentKey];
-        
-        // 随机更新进度
-        if (agent.progress < 100 && Math.random() > 0.5) {
-            agent.progress = Math.min(100, agent.progress + Math.random() * 10);
-        }
-        
-        // 更新其他指标
-        if (agent.processed !== undefined && agent.total !== undefined) {
-            if (agent.processed < agent.total && Math.random() > 0.7) {
-                agent.processed++;
-            }
-        }
-        
-        if (agent.quality !== undefined) {
-            agent.quality = Math.max(85, Math.min(100, agent.quality + (Math.random() - 0.5) * 2));
-        }
-        
-        if (agent.responseTime !== undefined) {
-            agent.responseTime = Math.max(0.5, Math.min(5, agent.responseTime + (Math.random() - 0.5) * 0.5));
-        }
-    });
-    
-    // 更新UI
-    updateAgentStatusUI();
+    // 从API获取实时状态
+    fetchAgentStatus();
 }
 
 // 更新智能体状态UI
@@ -929,27 +1079,64 @@ function updateAgentStatusUI() {
         const card = cards[index];
         
         if (card) {
-            // 更新进度条
-            const progressBar = card.querySelector('.progress-bar');
+            // 更新进度条 - 处理不同的类名
+            const progressBar = card.querySelector('.progress-bar') || card.querySelector('.bg-slate-500');
             if (progressBar) {
-                progressBar.style.width = `${agent.progress}%`;
+                // 确保进度值在合理范围内
+                const progress = Math.max(0, Math.min(100, agent.progress || 0));
+                progressBar.style.width = `${progress}%`;
             }
             
-            // 更新状态文本
+            // 更新状态文本 (.text-sm)
             const statusText = card.querySelector('.text-sm');
             if (statusText) {
                 switch (agentKey) {
                     case 'builder':
-                        statusText.textContent = `文档处理中... (${agent.processed}/${agent.total})`;
+                        // 确保数据合理
+                        const processed = agent.processed || 0;
+                        const total = agent.total || 0;
+                        statusText.textContent = `文档处理中... (${processed}/${total})`;
                         break;
                     case 'auditor':
-                        statusText.textContent = `质量检查中... (${Math.round(agent.quality)}%)`;
+                        // 确保质量评分在合理范围内
+                        const quality = Math.max(0, Math.min(100, agent.quality || 0));
+                        statusText.textContent = `质量检查中... (${Math.round(quality)}%)`;
                         break;
                     case 'analyst':
-                        statusText.textContent = `等待查询... (${agent.responseTime.toFixed(1)}s)`;
+                        // 确保响应时间合理
+                        const responseTime = Math.max(0, agent.responseTime || 0);
+                        statusText.textContent = `等待查询... (${responseTime.toFixed(1)}s)`;
                         break;
                     case 'extension':
-                        statusText.textContent = `插件加载中... (${agent.loaded}/${agent.total})`;
+                        // 确保数据合理
+                        const loaded = agent.loaded || 0;
+                        const totalPlugins = agent.total || 0;
+                        statusText.textContent = `插件加载中... (${loaded}/${totalPlugins})`;
+                        break;
+                }
+            }
+            
+            // 更新底部统计文本 (.text-xs)
+            const statsText = card.querySelector('.text-xs');
+            if (statsText) {
+                switch (agentKey) {
+                    case 'builder':
+                        const processed = agent.processed || 0;
+                        const total = agent.total || 0;
+                        statsText.textContent = `已处理 ${processed}/${total} 文档`;
+                        break;
+                    case 'auditor':
+                        const quality = Math.max(0, Math.min(100, agent.quality || 0));
+                        statsText.textContent = `质量评分: ${Math.round(quality)}%`;
+                        break;
+                    case 'analyst':
+                        const responseTime = Math.max(0, agent.responseTime || 0);
+                        statsText.textContent = `响应时间: ${responseTime.toFixed(1)}s`;
+                        break;
+                    case 'extension':
+                        const loaded = agent.loaded || 0;
+                        const totalPlugins = agent.total || 0;
+                        statsText.textContent = `已加载 ${loaded}/${totalPlugins} 插件`;
                         break;
                 }
             }
@@ -1085,13 +1272,13 @@ function viewProcessingResult(fileId) {
                         ${result.relationships.map(rel => `
                             <div class="bg-slate-700/50 rounded-lg p-3">
                                 <div class="text-sm mb-1">
-                                    <span class="text-blue-400">${rel.from}</span>
+                                    <span class="text-blue-400">${rel.source_entity_name || rel.from || '未知实体'}</span>
                                     <span class="text-slate-400">→</span>
-                                    <span class="text-green-400">${rel.to}</span>
+                                    <span class="text-green-400">${rel.target_entity_name || rel.to || '未知实体'}</span>
                                 </div>
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs px-2 py-1 bg-purple-600 rounded">${rel.type}</span>
-                                    <span class="text-xs text-slate-400">${(rel.confidence * 100).toFixed(1)}%</span>
+                                    <span class="text-xs text-slate-400">${((rel.confidence || 0.95) * 100).toFixed(1)}%</span>
                                 </div>
                             </div>
                         `).join('')}

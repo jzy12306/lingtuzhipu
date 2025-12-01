@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from bson import ObjectId
@@ -36,7 +37,7 @@ class KnowledgeRepository:
         try:
             self.logger.info("开始创建Neo4j索引")
             
-            neo4j_driver = await self.get_neo4j_driver()
+            neo4j_driver = self.get_neo4j_driver()
             if neo4j_driver is not None:
                 async with neo4j_driver.session() as session:
                     # 创建实体ID索引
@@ -110,50 +111,62 @@ class KnowledgeRepository:
                 entities_collection = mongodb.entities
                 await entities_collection.insert_one(entity_data)
             
-            # 保存到Neo4j
-            try:
-                neo4j_driver = await self.get_neo4j_driver()
-                if neo4j_driver is not None:
-                    async with neo4j_driver.session() as session:
-                        # 构建Cypher查询
-                        cypher = """
-                        CREATE (e:Entity {
-                            id: $id,
-                            name: $name,
-                            type: $type,
-                            confidence_score: $confidence_score,
-                            is_valid: $is_valid,
-                            source_document_id: $source_document_id,
-                            created_at: $created_at,
-                            updated_at: $updated_at
-                        })
-                        RETURN e
-                        """
-                        
-                        # 执行Cypher查询
-                        result = await session.run(cypher, {
-                            "id": entity_data["id"],
-                            "name": entity_data["name"],
-                            "type": entity_data["type"],
-                            "confidence_score": entity_data["confidence_score"],
-                            "is_valid": entity_data["is_valid"],
-                            "source_document_id": entity_data.get("source_document_id"),
-                            "created_at": entity_data["created_at"].isoformat(),
-                            "updated_at": entity_data["updated_at"].isoformat()
-                        })
-                        
-                        # 检查结果
-                        record = await result.single()
-                        if not record:
-                            self.logger.warning(f"Neo4j保存实体失败: {entity_data['id']}")
-            except Exception as neo4j_error:
-                self.logger.error(f"Neo4j保存实体失败: {str(neo4j_error)}")
+            # 保存到Neo4j（异步，不阻塞主流程）
+            asyncio.create_task(self._save_entity_to_neo4j(entity_data))
             
             # 返回创建的实体
             return Entity(**entity_data)
         except Exception as e:
             self.logger.error(f"创建实体失败: {str(e)}")
             raise
+    
+    async def _save_entity_to_neo4j(self, entity_data: Dict[str, Any]):
+        """异步保存实体到Neo4j"""
+        try:
+            neo4j_driver = self.get_neo4j_driver()
+            if neo4j_driver is not None:
+                async with neo4j_driver.session() as session:
+                    # 构建Cypher查询
+                    cypher = """
+                    CREATE (e:Entity {
+                        id: $id,
+                        name: $name,
+                        type: $type,
+                        description: $description,
+                        properties: $properties,
+                        confidence_score: $confidence_score,
+                        is_valid: $is_valid,
+                        source_document_id: $source_document_id,
+                        document_id: $document_id,
+                        user_id: $user_id,
+                        created_at: $created_at,
+                        updated_at: $updated_at
+                    })
+                    RETURN e
+                    """
+                    
+                    # 执行Cypher查询
+                    result = await session.run(cypher, {
+                        "id": entity_data["id"],
+                        "name": entity_data["name"],
+                        "type": entity_data["type"],
+                        "description": entity_data.get("description", ""),
+                        "properties": entity_data.get("properties", {}),
+                        "confidence_score": entity_data["confidence_score"],
+                        "is_valid": entity_data["is_valid"],
+                        "source_document_id": entity_data.get("source_document_id"),
+                        "document_id": entity_data.get("document_id"),
+                        "user_id": entity_data.get("user_id"),
+                        "created_at": entity_data["created_at"].isoformat(),
+                        "updated_at": entity_data["updated_at"].isoformat()
+                    })
+                    
+                    # 检查结果
+                    record = await result.single()
+                    if not record:
+                        self.logger.warning(f"Neo4j保存实体失败: {entity_data['id']}")
+        except Exception as neo4j_error:
+            self.logger.error(f"Neo4j保存实体失败: {str(neo4j_error)}")
     
     async def create_relation(self, relation_data: Dict[str, Any]) -> Relation:
         """创建关系"""
@@ -188,53 +201,213 @@ class KnowledgeRepository:
                 relations_collection = mongodb.relations
                 await relations_collection.insert_one(relation_data)
             
-            # 保存到Neo4j
-            try:
-                neo4j_driver = await self.get_neo4j_driver()
-                if neo4j_driver is not None:
-                    async with neo4j_driver.session() as session:
-                        # 构建Cypher查询
-                        cypher = """
-                        MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id})
-                        CREATE (source)-[r:RELATION {
-                            id: $id,
-                            type: $type,
-                            confidence_score: $confidence_score,
-                            is_valid: $is_valid,
-                            source_document_id: $source_document_id,
-                            created_at: $created_at,
-                            updated_at: $updated_at,
-                            description: $description
-                        }]->(target)
-                        RETURN r
-                        """
-                        
-                        # 执行Cypher查询
-                        result = await session.run(cypher, {
-                            "id": relation_data["id"],
-                            "source_id": relation_data["source_entity_id"],
-                            "target_id": relation_data["target_entity_id"],
-                            "type": relation_data["type"],
-                            "confidence_score": relation_data["confidence_score"],
-                            "is_valid": relation_data["is_valid"],
-                            "source_document_id": relation_data.get("source_document_id"),
-                            "created_at": relation_data["created_at"].isoformat(),
-                            "updated_at": relation_data["updated_at"].isoformat(),
-                            "description": relation_data["description"]
-                        })
-                        
-                        # 检查结果
-                        record = await result.single()
-                        if not record:
-                            self.logger.warning(f"Neo4j保存关系失败: {relation_data['id']}")
-            except Exception as neo4j_error:
-                self.logger.error(f"Neo4j保存关系失败: {str(neo4j_error)}")
+            # 保存到Neo4j（异步，不阻塞主流程）
+            asyncio.create_task(self._save_relation_to_neo4j(relation_data))
             
             # 返回创建的关系
             return Relation(**relation_data)
         except Exception as e:
             self.logger.error(f"创建关系失败: {str(e)}")
             raise
+    
+    async def _save_relation_to_neo4j(self, relation_data: Dict[str, Any]):
+        """异步保存关系到Neo4j"""
+        try:
+            neo4j_driver = self.get_neo4j_driver()
+            if neo4j_driver is not None:
+                async with neo4j_driver.session() as session:
+                    # 构建Cypher查询
+                    cypher = """
+                    MATCH (source:Entity {id: $source_id}), (target:Entity {id: $target_id})
+                    CREATE (source)-[r:RELATION {
+                        id: $id,
+                        type: $type,
+                        source_entity_name: $source_entity_name,
+                        target_entity_name: $target_entity_name,
+                        description: $description,
+                        properties: $properties,
+                        confidence_score: $confidence_score,
+                        is_valid: $is_valid,
+                        source_document_id: $source_document_id,
+                        document_id: $document_id,
+                        user_id: $user_id,
+                        created_at: $created_at,
+                        updated_at: $updated_at
+                    }]->(target)
+                    RETURN r
+                    """
+                    
+                    # 执行Cypher查询
+                    result = await session.run(cypher, {
+                        "id": relation_data["id"],
+                        "source_id": relation_data["source_entity_id"],
+                        "target_id": relation_data["target_entity_id"],
+                        "type": relation_data["type"],
+                        "source_entity_name": relation_data.get("source_entity_name"),
+                        "target_entity_name": relation_data.get("target_entity_name"),
+                        "description": relation_data.get("description", ""),
+                        "properties": relation_data.get("properties", {}),
+                        "confidence_score": relation_data["confidence_score"],
+                        "is_valid": relation_data["is_valid"],
+                        "source_document_id": relation_data.get("source_document_id"),
+                        "document_id": relation_data.get("document_id"),
+                        "user_id": relation_data.get("user_id"),
+                        "created_at": relation_data["created_at"].isoformat(),
+                        "updated_at": relation_data["updated_at"].isoformat()
+                    })
+                    
+                    # 检查结果
+                    record = await result.single()
+                    if not record:
+                        self.logger.warning(f"Neo4j保存关系失败: {relation_data['id']}")
+        except Exception as neo4j_error:
+            self.logger.error(f"Neo4j保存关系失败: {str(neo4j_error)}")
+    
+    async def batch_create_entities(self, entities_data: List[Dict[str, Any]]) -> List[Entity]:
+        """批量创建实体"""
+        try:
+            saved_entities = []
+            mongodb = await db_service.get_mongodb()
+            
+            if mongodb is not None:
+                entities_collection = mongodb.entities
+                
+                # 批量插入到MongoDB
+                if entities_data:
+                    # 确保每个实体都有必要字段
+                    for entity_data in entities_data:
+                        if "id" not in entity_data:
+                            entity_data["id"] = str(uuid.uuid4())
+                        if "confidence_score" not in entity_data:
+                            entity_data["confidence_score"] = 1.0
+                        if "is_valid" not in entity_data:
+                            entity_data["is_valid"] = True
+                        if "created_at" not in entity_data:
+                            entity_data["created_at"] = datetime.utcnow()
+                        if "updated_at" not in entity_data:
+                            entity_data["updated_at"] = datetime.utcnow()
+                    
+                    # 批量插入
+                    await entities_collection.insert_many(entities_data)
+                    saved_entities = [Entity(**entity_data) for entity_data in entities_data]
+            
+            # 临时禁用Neo4j写入（由于连接问题）
+            # asyncio.create_task(self._batch_save_entities_to_neo4j(entities_data))
+            if entities_data:
+                self.logger.warning(f"Neo4j连接不可用，跳过实体写入Neo4j (MongoDB已保存 {len(entities_data)} 个实体)")
+            
+            return saved_entities
+        except Exception as e:
+            self.logger.error(f"批量创建实体失败: {str(e)}")
+            raise
+    
+    async def batch_create_relations(self, relations_data: List[Dict[str, Any]]) -> List[Relation]:
+        """批量创建关系"""
+        try:
+            saved_relations = []
+            mongodb = await db_service.get_mongodb()
+            
+            if mongodb is not None:
+                relations_collection = mongodb.relations
+                
+                # 批量插入到MongoDB
+                if relations_data:
+                    # 确保每个关系都有必要字段
+                    for relation_data in relations_data:
+                        if "id" not in relation_data:
+                            relation_data["id"] = str(uuid.uuid4())
+                        if "confidence_score" not in relation_data:
+                            relation_data["confidence_score"] = 1.0
+                        if "is_valid" not in relation_data:
+                            relation_data["is_valid"] = True
+                        if "created_at" not in relation_data:
+                            relation_data["created_at"] = datetime.utcnow()
+                        if "updated_at" not in relation_data:
+                            relation_data["updated_at"] = datetime.utcnow()
+                        if "description" not in relation_data:
+                            relation_data["description"] = ""
+                    
+                    # 批量插入
+                    await relations_collection.insert_many(relations_data)
+                    saved_relations = [Relation(**relation_data) for relation_data in relations_data]
+            
+            # 临时禁用Neo4j写入（由于连接问题）
+            # asyncio.create_task(self._batch_save_relations_to_neo4j(relations_data))
+            if relations_data:
+                self.logger.warning(f"Neo4j连接不可用，跳过关系统写入Neo4j (MongoDB已保存 {len(relations_data)} 个关系)")
+            
+            return saved_relations
+        except Exception as e:
+            self.logger.error(f"批量创建关系失败: {str(e)}")
+            raise
+    
+    async def _batch_save_entities_to_neo4j(self, entities_data: List[Dict[str, Any]]):
+        """异步批量保存实体到Neo4j"""
+        try:
+            neo4j_driver = self.get_neo4j_driver()
+            if neo4j_driver is not None and entities_data:
+                async with neo4j_driver.session() as session:
+                    # 使用UNWIND进行批量插入
+                    cypher = """
+                    UNWIND $entities as entity
+                    CREATE (e:Entity {
+                        id: entity.id,
+                        name: entity.name,
+                        type: entity.type,
+                        description: entity.description,
+                        properties: entity.properties,
+                        confidence_score: entity.confidence_score,
+                        is_valid: entity.is_valid,
+                        source_document_id: entity.source_document_id,
+                        document_id: entity.document_id,
+                        user_id: entity.user_id,
+                        created_at: entity.created_at.isoformat(),
+                        updated_at: entity.updated_at.isoformat()
+                    })
+                    RETURN count(e) as created_count
+                    """
+                    
+                    result = await session.run(cypher, entities=entities_data)
+                    record = await result.single()
+                    if record:
+                        self.logger.info(f"Neo4j批量保存实体成功，创建了 {record['created_count']} 个实体")
+        except Exception as neo4j_error:
+            self.logger.error(f"Neo4j批量保存实体失败: {str(neo4j_error)}")
+    
+    async def _batch_save_relations_to_neo4j(self, relations_data: List[Dict[str, Any]]):
+        """异步批量保存关系到Neo4j"""
+        try:
+            neo4j_driver = self.get_neo4j_driver()
+            if neo4j_driver is not None and relations_data:
+                async with neo4j_driver.session() as session:
+                    # 使用UNWIND进行批量插入
+                    cypher = """
+                    UNWIND $relations as relation
+                    MATCH (source:Entity {id: relation.source_entity_id}), (target:Entity {id: relation.target_entity_id})
+                    CREATE (source)-[r:RELATION {
+                        id: relation.id,
+                        type: relation.type,
+                        source_entity_name: relation.source_entity_name,
+                        target_entity_name: relation.target_entity_name,
+                        description: relation.description,
+                        properties: relation.properties,
+                        confidence_score: relation.confidence_score,
+                        is_valid: relation.is_valid,
+                        source_document_id: relation.source_document_id,
+                        document_id: relation.document_id,
+                        user_id: relation.user_id,
+                        created_at: relation.created_at.isoformat(),
+                        updated_at: relation.updated_at.isoformat()
+                    }]->(target)
+                    RETURN count(r) as created_count
+                    """
+                    
+                    result = await session.run(cypher, relations=relations_data)
+                    record = await result.single()
+                    if record:
+                        self.logger.info(f"Neo4j批量保存关系成功，创建了 {record['created_count']} 个关系")
+        except Exception as neo4j_error:
+            self.logger.error(f"Neo4j批量保存关系失败: {str(neo4j_error)}")
     
     async def find_entity_by_id(self, entity_id: str) -> Optional[Entity]:
         """根据ID查找实体"""
@@ -253,7 +426,7 @@ class KnowledgeRepository:
             RETURN e
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query, id=entity_id)
                 record = await result.single()
@@ -301,7 +474,7 @@ class KnowledgeRepository:
             RETURN r, startNode(r).id as source_id, endNode(r).id as target_id
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query, id=relation_id)
                 record = await result.single()
@@ -351,7 +524,7 @@ class KnowledgeRepository:
             RETURN e
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query, document_id=document_id)
                 entities = []
@@ -394,7 +567,7 @@ class KnowledgeRepository:
             LIMIT 100
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(search_query, query=query)
                 entities = []
@@ -443,7 +616,7 @@ class KnowledgeRepository:
             RETURN r, startNode(r).id as source_id, endNode(r).id as target_id
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query, document_id=document_id)
                 relations = []
@@ -478,7 +651,7 @@ class KnowledgeRepository:
     async def execute_graph_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """执行自定义Cypher查询"""
         try:
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query, params or {})
                 
@@ -525,7 +698,7 @@ class KnowledgeRepository:
             RETURN e1, e2
             """
             
-            driver = await self.get_neo4j_driver()
+            driver = self.get_neo4j_driver()
             async with driver.session() as session:
                 result = await session.run(query)
                 
@@ -650,7 +823,7 @@ class KnowledgeRepository:
         """查找两个实体之间的路径"""
         try:
             # 使用db_service访问Neo4j
-            neo4j_driver = await self.get_neo4j_driver()
+            neo4j_driver = self.get_neo4j_driver()
             
             # 使用Neo4j查找路径
             async with neo4j_driver.session() as session:
@@ -708,7 +881,7 @@ class KnowledgeRepository:
         try:
             self.logger.info(f"查找最短路径: {source_id} -> {target_id}, 最大深度: {max_depth}")
             
-            neo4j_driver = await self.get_neo4j_driver()
+            neo4j_driver = self.get_neo4j_driver()
             if neo4j_driver is None:
                 return None
             
@@ -780,7 +953,7 @@ class KnowledgeRepository:
         try:
             self.logger.info(f"使用{algorithm}算法检测社区")
             
-            neo4j_driver = await self.get_neo4j_driver()
+            neo4j_driver = self.get_neo4j_driver()
             if neo4j_driver is None:
                 return None
             
@@ -929,7 +1102,7 @@ class KnowledgeRepository:
         }
         return color_map.get(entity_type, "#BDC3C7")
     
-    async def update_document_status(self, document_id: str, status: str, processing_details: Optional[Dict] = None) -> bool:
+    async def update_document_status(self, document_id: str, status: str, processing_details: Optional[Dict] = None, entities_count: Optional[int] = None, relations_count: Optional[int] = None) -> bool:
         """更新文档处理状态"""
         try:
             # 获取MongoDB连接
@@ -946,13 +1119,21 @@ class KnowledgeRepository:
                 if processing_details:
                     update_data["processing_details"] = processing_details
                 
+                # 如果提供了实体和关系数量，更新到顶层字段（重要！）
+                if entities_count is not None:
+                    update_data["entities_count"] = entities_count
+                if relations_count is not None:
+                    update_data["relations_count"] = relations_count
+                
                 # 执行更新
                 result = await documents_collection.update_one(
                     {"id": document_id},
                     {"$set": update_data}
                 )
                 
-                logger.info(f"更新文档状态 - 文档ID: {document_id}, 状态: {status}, 更新结果: {result.modified_count} 条记录被更新")
+                logger.info(f"更新文档状态 - 文档ID: {document_id}, 状态: {status}, "
+                           f"实体: {entities_count}, 关系: {relations_count}, "
+                           f"更新结果: {result.modified_count} 条记录被更新")
                 return result.modified_count > 0
             
             logger.warning(f"无法更新文档状态，MongoDB连接不可用")

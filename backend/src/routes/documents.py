@@ -11,6 +11,7 @@ from src.repositories.knowledge_repository import KnowledgeRepository
 from src.utils.dependencies import get_current_user, validate_document_permission
 from src.utils.file_processing import process_uploaded_file
 from src.services.document_service import DocumentService
+from src.services.db_service import db_service
 from src.models.user import User
 from src.agents.builder import BuilderAgentService
 from src.config.settings import settings
@@ -51,28 +52,49 @@ async def create_document(
 ):
     """上传并创建新文档"""
     try:
-        # 处理上传的文件
-        file_content, file_type = await process_uploaded_file(file)
+        # 先读取文件内容
+        file_content = await file.read()
         
-        # 如果file_type为None，根据文件名推断
-        if not file_type:
-            if file.filename:
-                if file.filename.endswith('.txt'):
-                    file_type = 'txt'
-                elif file.filename.endswith('.pdf'):
-                    file_type = 'pdf'
-                elif file.filename.endswith('.docx'):
-                    file_type = 'docx'
-                else:
-                    file_type = 'txt'  # 默认使用txt
+        # 根据文件扩展名确定类型
+        file_type = 'txt'  # 默认类型
+        if file.filename:
+            filename = file.filename.lower()
+            if filename.endswith('.pdf'):
+                file_type = 'pdf'
+            elif filename.endswith('.docx'):
+                file_type = 'docx'
+            elif filename.endswith('.xlsx'):
+                file_type = 'xlsx'
+            elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+                file_type = 'jpg'
+            elif filename.endswith('.png'):
+                file_type = 'png'
+            elif filename.endswith('.txt'):
+                file_type = 'txt'
+        
+        # 如果是文本文件，尝试解码为字符串
+        text_content = ""
+        if file_type in ['txt', 'md']:
+            if isinstance(file_content, bytes):
+                try:
+                    text_content = file_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        text_content = file_content.decode('gbk')
+                    except:
+                        text_content = str(file_content)
             else:
-                file_type = 'txt'  # 默认使用txt
+                text_content = str(file_content)
+        else:
+            # 对于非文本文件，转换为base64存储
+            import base64
+            text_content = base64.b64encode(file_content).decode('utf-8')
         
         # 创建文档
         document_data = DocumentCreate(
             title=file.filename,
             document_type=file_type,
-            content=file_content,
+            content=text_content,
             filename=file.filename,
             file_type=file_type
         )
@@ -85,6 +107,7 @@ async def create_document(
         
         return document
     except Exception as e:
+        logger.error(f"创建文档失败: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -117,8 +140,42 @@ async def get_document(
     current_user: User = Depends(get_current_user),
     document: Document = Depends(validate_document_permission)
 ):
-    """获取文档详情"""
-    return document
+    """获取文档详情（包含实体和关系列表）"""
+    try:
+        # 获取数据库连接
+        mongodb = await db_service.get_mongodb()
+        
+        if mongodb is not None:
+            # 获取实体列表
+            entities_collection = mongodb.entities
+            entities = []
+            async for entity_doc in entities_collection.find({"source_document_id": document_id}):
+                if "_id" in entity_doc:
+                    del entity_doc["_id"]
+                entities.append(entity_doc)
+            
+            # 获取关系列表（使用document_id字段查询，集合名为relations）
+            relationships = []
+            async for relation_doc in mongodb.relations.find({"document_id": document_id}):
+                if "_id" in relation_doc:
+                    del relation_doc["_id"]
+                relationships.append(relation_doc)
+            
+            # 将实体和关系添加到返回数据中
+            document_dict = document.dict()
+            document_dict["entities"] = entities
+            document_dict["relationships"] = relationships
+            
+            logger.info(f"获取文档详情成功 - 文档ID: {document_id}, 实体数: {len(entities)}, 关系数: {len(relationships)}")
+            return document_dict
+        else:
+            logger.warning(f"MongoDB连接不可用，无法获取实体和关系列表")
+            return document
+            
+    except Exception as e:
+        logger.error(f"获取文档详情失败: {str(e)}")
+        # 出错时返回基础文档信息
+        return document
 
 
 @router.get("/{document_id}/content", response_model=DocumentContent)

@@ -45,6 +45,7 @@ class QueryResponse(BaseModel):
     generated_code: Optional[str] = Field(None, description="生成的代码")
     visualization_data: Optional[Dict[str, Any]] = Field(None, description="可视化数据")
     related_entities: List[Dict[str, Any]] = Field(default_factory=list, description="相关实体")
+    related_relationships: List[Dict[str, Any]] = Field(default_factory=list, description="相关关系")
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0, description="置信度分数")
     execution_time: float = Field(..., description="执行时间（秒）")
     complexity: QueryComplexity = Field(..., description="查询复杂度")

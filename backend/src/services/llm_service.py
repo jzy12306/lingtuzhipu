@@ -62,15 +62,20 @@ class LLMService:
     ) -> str:
         """生成文本响应"""
         try:
+            # 检查API密钥是否配置
+            if not self.kimi_api_key:
+                self.logger.warning("Kimi API密钥未配置，无法调用LLM服务")
+                return ""
+            
             # 直接调用Kimi API，因为LOCAL_LLM_ENABLED=false
-            self.logger.debug(f"调用Kimi API生成文本，prompt长度: {len(prompt)}")
+            self.logger.debug(f"调用Kimi API生成文本，prompt长度: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
             return await self._generate_with_kimi(
                 prompt, system_message, max_tokens, temperature
             )
         except Exception as e:
-            self.logger.error(f"LLM生成失败: {str(e)}")
-            # 直接返回错误信息，而不是抛出异常
-            return f"调用失败: {str(e)}"
+            self.logger.error(f"LLM生成失败: {str(e)}", exc_info=True)
+            # 直接返回空字符串，让调用者处理这种情况
+            return ""
     
     async def _generate_with_local_llm(
         self, 

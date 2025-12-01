@@ -8,7 +8,8 @@ import string
 import os
 from typing import Optional
 
-from src.models.user import User, UserCreate, UserUpdate, UserResponse, Token, TokenData, UserLogin, VerificationCode
+from src.models.user import User, UserCreate, UserUpdate, UserResponse, TokenData, UserLogin
+from src.schemas.user import TokenResponse, VerificationCode, MfaVerifyRequest
 from src.repositories.user_repository import UserRepository
 from src.services.email_service import email_service
 from src.services.auth_service import auth_service
@@ -30,6 +31,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # 开发模式下跳过验证码验证的配置
 SKIP_VERIFICATION_CODE = os.getenv("SKIP_VERIFICATION_CODE", "False").lower() == "true"
+
+# 验证码存储（内存存储，仅用于开发环境）
+verification_codes = {}
 
 
 def get_user_repository() -> UserRepository:
@@ -112,6 +116,15 @@ async def get_current_active_user(
     return current_user
 
 
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """获取当前管理员用户"""
+    if not current_user.is_admin and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="权限不足，需要管理员权限")
+    return current_user
+
+
 @router.post("/send-verification-code")
 async def send_verification_code(
     request: Request,
@@ -136,7 +149,7 @@ async def send_verification_code(
 @router.post("/register", response_model=UserResponse)
 async def register(
     user_data: UserCreate,
-    verification_code: str,
+    verification_code: Optional[str] = None,
     user_repo: UserRepository = Depends(get_user_repository)
 ):
     """用户注册"""
@@ -201,7 +214,7 @@ async def register(
     return UserResponse(**new_user.dict())
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=TokenResponse)
 async def login(
     login_data: UserLogin,
     user_repo: UserRepository = Depends(get_user_repository)
@@ -323,7 +336,7 @@ async def login_mfa_verify(
     }
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     refresh_token: str,
     user_repo: UserRepository = Depends(get_user_repository)

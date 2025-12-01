@@ -68,6 +68,8 @@ class DocumentResponse(DocumentBase):
     ocr_result: Optional[Dict[str, Any]] = Field(None, description="OCR识别结果")
     ocr_confidence: Optional[float] = Field(None, description="OCR识别置信度")
     ocr_error: Optional[str] = Field(None, description="OCR识别错误信息")
+    entities: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="提取的实体列表")
+    relationships: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="提取的关系列表")
     
     class Config:
         from_attributes = True

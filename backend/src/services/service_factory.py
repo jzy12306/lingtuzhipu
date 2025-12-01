@@ -15,7 +15,6 @@ from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
 from src.repositories.query_history_repository import QueryHistoryRepository
 from src.repositories.business_rule_repository import BusinessRuleRepository
-from src.repositories.business_rule_repository import BusinessRuleRepository
 from src.services.analyst_agent_service import AnalystAgentService
 from src.schemas.user import UserCreate, UserRole
 from src.core.security import get_password_hash
@@ -54,7 +53,7 @@ class ServiceFactory:
             self._knowledge_repository: Optional[KnowledgeRepository] = None
             self._query_history_repository: Optional[QueryHistoryRepository] = None
             self._business_rule_repository: Optional[BusinessRuleRepository] = None
-            self._business_rule_repository: Optional[BusinessRuleRepository] = None
+            self._agent_manager: Optional = None
     
     @property
     def db_service(self) -> DatabaseService:
@@ -97,11 +96,12 @@ class ServiceFactory:
     
     @property
     def analyst_agent(self):
-        """获取分析师智能体实例"""
+        """获取分析师智能体实例（使用LLM具体实现）"""
         if self._analyst_agent is None:
             # 使用延迟导入避免循环依赖
-            from src.services.analyst_agent import AnalystAgent
-            self._analyst_agent = AnalystAgent()
+            from src.agents.analyst.llm_analyst_agent import LLMAnalystAgent
+            from src.repositories.knowledge_repository import KnowledgeRepository
+            self._analyst_agent = LLMAnalystAgent(knowledge_repository=self.knowledge_repository)
         return self._analyst_agent
     
     @property
@@ -197,6 +197,17 @@ class ServiceFactory:
             from src.agents.extension.extension_agent import ExtensionAgent
             self._extension_agent = ExtensionAgent("extension_1", "Extension Agent")
         return self._extension_agent
+    
+    @property
+    def agent_manager(self):
+        """
+        获取智能体管理器实例
+        """
+        if self._agent_manager is None:
+            # 使用延迟导入避免循环依赖
+            from src.agents.agent_manager import agent_manager
+            self._agent_manager = agent_manager
+        return self._agent_manager
     
     async def initialize_all(self):
         """初始化所有服务"""
