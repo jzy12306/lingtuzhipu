@@ -5,6 +5,7 @@ from src.repositories.config_repository import ConfigRepository
 from src.core.performance import performance_config
 from src.utils.dependencies import get_current_admin_user
 
+
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 
@@ -19,6 +20,21 @@ async def get_config(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """获取系统配置"""
+    try:
+        config = await config_repo.get_config()
+        return config
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取系统配置失败: {str(e)}"
+        )
+
+
+@router.get("/public", response_model=SystemConfigResponse)
+async def get_public_config(
+    config_repo: ConfigRepository = Depends(get_config_repository)
+):
+    """获取公开系统配置（无需认证）"""
     try:
         config = await config_repo.get_config()
         return config

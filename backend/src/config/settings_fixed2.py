@@ -45,12 +45,6 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_EXTENSIONS: Union[str, List[str]] = "pdf,docx,doc,txt,md,html,jpg,jpeg,png,xlsx,xls,csv"
     
-    # 智能体配置
-    BUILDER_AGENT_ENABLED: bool = True
-    AUDITOR_AGENT_ENABLED: bool = True
-    ANALYST_AGENT_ENABLED: bool = True
-    EXTENSION_AGENT_ENABLED: bool = True
-    
     @property
     def CORS_ORIGINS(self) -> List[str]:
         """将CORS_ORIGINS字符串转换为列表"""

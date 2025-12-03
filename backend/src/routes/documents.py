@@ -8,7 +8,7 @@ from src.models.document import (
 )
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.knowledge_repository import KnowledgeRepository
-from src.utils.dependencies import get_current_user, validate_document_permission
+from src.utils.dependencies import get_current_user, get_current_user_optional, validate_document_permission
 from src.utils.file_processing import process_uploaded_file
 from src.services.document_service import DocumentService
 from src.services.db_service import db_service

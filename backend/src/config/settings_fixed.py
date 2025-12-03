@@ -31,9 +31,13 @@ class Settings(BaseSettings):
     API_BASE: str = "https://api.moonshot.cn/v1"
     MODEL: str = "moonshot-v1-32k"
     
-    # CORS配置 - 修复：明确添加此字段，避免pydantic解析错误
-    # 使用字符串存储，避免pydantic尝试JSON解析
-    _CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://localhost"
+    # CORS配置 - 关键修复：使用字符串存储，避免pydantic JSON解析错误
+    _cors_origins: str = "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,http://localhost,http://127.0.0.1"
+    
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """将字符串转换为列表，避免pydantic JSON解析错误"""
+        return [origin.strip() for origin in self._cors_origins.split(",") if origin.strip()]
     
     # 安全配置
     SECRET_KEY: str = "development_secret_key_change_in_production"
@@ -44,17 +48,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_EXTENSIONS: Union[str, List[str]] = "pdf,docx,doc,txt,md,html,jpg,jpeg,png,xlsx,xls,csv"
-    
-    # 智能体配置
-    BUILDER_AGENT_ENABLED: bool = True
-    AUDITOR_AGENT_ENABLED: bool = True
-    ANALYST_AGENT_ENABLED: bool = True
-    EXTENSION_AGENT_ENABLED: bool = True
-    
-    @property
-    def CORS_ORIGINS(self) -> List[str]:
-        """将CORS_ORIGINS字符串转换为列表"""
-        return [origin.strip() for origin in self._CORS_ORIGINS.split(",") if origin.strip()]
     
     @property
     def allowed_extensions_list(self) -> List[str]:

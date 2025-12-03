@@ -14,7 +14,7 @@ class AuthService:
     """认证服务"""
     
     def __init__(self):
-        self.pwd_context = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
+        self.pwd_context = CryptContext(schemes=["pbkdf2_sha256"])
         self.secret_key = settings.SECRET_KEY
         self.algorithm = settings.ALGORITHM
         self.access_token_expire_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES

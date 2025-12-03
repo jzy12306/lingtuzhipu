@@ -26,14 +26,28 @@ class Settings(BaseSettings):
     LOCAL_LLM_MODEL: str = "qwen2.5-7b-instruct-1m"
     LOCAL_LLM_TIMEOUT: int = 120
     
+
+    
     # LLM配置 - Kimi
     API_KEY: str = ""
     API_BASE: str = "https://api.moonshot.cn/v1"
     MODEL: str = "moonshot-v1-32k"
     
-    # CORS配置 - 修复：明确添加此字段，避免pydantic解析错误
-    # 使用字符串存储，避免pydantic尝试JSON解析
-    _CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://localhost"
+    # Kimi API配置别名（保持向后兼容）
+    KIMI_API_KEY: str = API_KEY
+    KIMI_BASE_URL: str = API_BASE
+    
+    # 构建者智能体配置
+    BUILDER_AGENT_ENABLED: bool = True
+    
+    # 文档处理限制
+    MAX_ENTITIES_PER_DOCUMENT: int = 1000
+    MAX_RELATIONS_PER_DOCUMENT: int = 2000
+    
+    # 向量数据库配置
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
+    VECTOR_DIMENSION: int = 1536
     
     # 安全配置
     SECRET_KEY: str = "development_secret_key_change_in_production"
@@ -44,17 +58,6 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_EXTENSIONS: Union[str, List[str]] = "pdf,docx,doc,txt,md,html,jpg,jpeg,png,xlsx,xls,csv"
-    
-    # 智能体配置
-    BUILDER_AGENT_ENABLED: bool = True
-    AUDITOR_AGENT_ENABLED: bool = True
-    ANALYST_AGENT_ENABLED: bool = True
-    EXTENSION_AGENT_ENABLED: bool = True
-    
-    @property
-    def CORS_ORIGINS(self) -> List[str]:
-        """将CORS_ORIGINS字符串转换为列表"""
-        return [origin.strip() for origin in self._CORS_ORIGINS.split(",") if origin.strip()]
     
     @property
     def allowed_extensions_list(self) -> List[str]:

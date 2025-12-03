@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识图谱可视化 - 3D交互式探索</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+        }
+        .hero-title {
+            font-family: 'Noto Serif SC', serif;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .agent-card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .control-panel {
+            backdrop-filter: blur(10px);
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .search-input {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        .search-input:focus {
+            border-color: rgba(6, 182, 212, 0.8);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+        .node-info-card {
+            backdrop-filter: blur(15px);
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .floating-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .glow-effect {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #06b6d4, #3b82f6);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        #graph-container {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .node-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .node-type-entity { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .node-type-event { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .node-type-concept { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+        .node-type-document { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        #particles-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="text-white overflow-x-hidden">
+    <!-- 粒子背景容器 -->
+    <div id="particles-container"></div>
+    
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold">灵图智谱</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="index.html" class="text-slate-300 hover:text-white transition-colors">首页</a>
+                    <a href="query.html" class="text-slate-300 hover:text-white transition-colors">知识查询</a>
+                    <a href="graph.html" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">图谱可视</a>
+                    <a href="admin.html" class="text-slate-300 hover:text-white transition-colors">系统管理</a>
+                    <a href="user-center.html" class="text-slate-300 hover:text-white transition-colors">用户中心</a>
+                    <button onclick="logout()" class="text-slate-300 hover:text-red-400 transition-colors">退出登录</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="pt-24 pb-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Hero 区域 -->
+            <div class="text-center mb-16 floating-animation">
+                <h1 class="text-5xl md:text-6xl font-bold hero-title mb-6">知识图谱可视化</h1>
+                <p class="text-xl text-slate-400 max-w-3xl mx-auto">3D交互式知识图谱探索，支持节点搜索、关系分析和路径发现</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- 控制面板 -->
+                <div class="lg:col-span-1">
+                    <div class="control-panel rounded-2xl p-6 sticky top-24 glow-effect">
+                        <!-- 搜索功能 -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-3">节点搜索</h3>
+                            <div class="relative">
+                                <input 
+                                    type="text" 
+                                    id="node-search" 
+                                    placeholder="搜索节点..."
+                                    class="search-input w-full px-4 py-3 rounded-lg text-white placeholder-slate-400 focus:outline-none"
+                                >
+                                <div class="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                    <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 筛选选项 -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-3">节点类型</h3>
+                            <div class="space-y-2">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="checkbox" class="node-filter" data-type="entity" checked class="w-4 h-4 text-cyan-600 rounded">
+                                    <span class="node-type-badge node-type-entity">实体</span>
+                                    <span class="text-sm text-slate-300">公司、人物、产品</span>
+                                </label>
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="checkbox" class="node-filter" data-type="event" checked class="w-4 h-4 text-cyan-600 rounded">
+                                    <span class="node-type-badge node-type-event">事件</span>
+                                    <span class="text-sm text-slate-300">会议、发布、并购</span>
+                                </label>
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="checkbox" class="node-filter" data-type="concept" checked class="w-4 h-4 text-cyan-600 rounded">
+                                    <span class="node-type-badge node-type-concept">概念</span>
+                                    <span class="text-sm text-slate-300">技术、理论、方法</span>
+                                </label>
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="checkbox" class="node-filter" data-type="document" checked class="w-4 h-4 text-cyan-600 rounded">
+                                    <span class="node-type-badge node-type-document">文档</span>
+                                    <span class="text-sm text-slate-300">报告、论文、专利</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 布局控制 -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-3">布局控制</h3>
+                            <div class="space-y-3">
+                                <button onclick="resetGraphView()" class="w-full px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                                    重置视图
+                                </button>
+                                <button onclick="centerGraph()" class="w-full px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                                    居中显示
+                                </button>
+                                <button onclick="toggleLayout()" class="w-full px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                                    切换布局
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 图谱统计 -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-3">图谱统计</h3>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">节点总数:</span>
+                                    <span id="node-count">1,247</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">关系总数:</span>
+                                    <span id="relationship-count">3,892</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">当前显示:</span>
+                                    <span id="visible-nodes">156</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图谱展示区域 -->
+                <div class="lg:col-span-3">
+                    <div class="relative">
+                        <!-- 图谱容器 -->
+                        <div id="graph-container" class="bg-slate-800/50 border border-slate-700/50" style="height: 600px;">
+                            <div class="absolute inset-0 flex items-center justify-center" id="loading-indicator">
+                                <div class="text-center">
+                                    <div class="loading-spinner w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full mb-4 mx-auto"></div>
+                                    <p class="text-slate-400">正在加载知识图谱...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 图例 -->
+                        <div class="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-sm rounded-lg p-4 border border-slate-600/50">
+                            <h4 class="font-medium mb-2 text-sm">图例</h4>
+                            <div class="space-y-1 text-xs">
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <span>实体节点</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    <span>事件节点</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
+                                    <span>概念节点</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                    <span>文档节点</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 工具栏 -->
+                        <div class="absolute bottom-4 left-4 flex items-center space-x-2">
+                            <button onclick="zoomIn()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                            <button onclick="zoomOut()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                            <button onclick="toggleFullscreen()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 01-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L6.414 15H8a1 1 0 010 2H4a1 1 0 01-1-1v-4zm13-1a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L15 13.586V12a1 1 0 011-1z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 节点详情面板 -->
+            <div id="node-details" class="hidden fixed top-24 right-6 w-80 node-info-card rounded-xl p-6 z-40">
+                <div class="flex items-start justify-between mb-4">
+                    <h3 class="text-lg font-semibold" id="node-title">节点详情</h3>
+                    <button onclick="closeNodeDetails()" class="text-slate-400 hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="node-content">
+                    <!-- 节点详情内容将在这里动态生成 -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="py-12 border-t border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p class="text-slate-400">© 2025 灵图智谱. 基于多智能体协作的先进知识工程平台.</p>
+        </div>
+    </footer>
+
+    <script>
+        // 全局变量
+        let graphData = null;
+        let simulation = null;
+        let svg = null;
+        let selectedNode = null;
+        let currentLayout = 'force';
+
+        // 模拟知识图谱数据
+        const mockGraphData = {
+            nodes: [
+                // 实体节点
+                { id: 'apple', name: '苹果公司', type: 'entity', category: '公司', properties: { founded: '1976', employees: '147000', revenue: '$394.3B' } },
+                { id: 'jobs', name: '史蒂夫·乔布斯', type: 'entity', category: '人物', properties: { birth: '1955', role: '创始人', status: '已故' } },
+                { id: 'cook', name: '蒂姆·库克', type: 'entity', category: '人物', properties: { birth: '1960', role: 'CEO', since: '2011' } },
+                { id: 'iphone', name: 'iPhone', type: 'entity', category: '产品', properties: { launched: '2007', category: '智能手机', units: '2.3B+' } },
+                { id: 'macbook', name: 'MacBook', type: 'entity', category: '产品', properties: { launched: '2006', category: '笔记本电脑' } },
+                { id: 'ipad', name: 'iPad', type: 'entity', category: '产品', properties: { launched: '2010', category: '平板电脑', units: '500M+' } },
+                
+                // 事件节点
+                { id: 'event1', name: 'iPhone发布会', type: 'event', category: '产品发布', properties: { date: '2007-01-09', location: '旧金山' } },
+                { id: 'event2', name: 'WWDC 2023', type: 'event', category: '开发者大会', properties: { date: '2023-06-05', location: '线上' } },
+                { id: 'event3', name: '乔布斯离世', type: 'event', category: '重要事件', properties: { date: '2011-10-05', impact: '重大' } },
+                
+                // 概念节点
+                { id: 'concept1', name: '创新设计', type: 'concept', category: '设计理念', properties: { principle: '简约至上', focus: '用户体验' } },
+                { id: 'concept2', name: '生态系统', type: 'concept', category: '商业模式', properties: { components: '硬件+软件+服务', integration: '深度' } },
+                { id: 'concept3', name: '垂直整合', type: 'concept', category: '商业策略', properties: { control: '全产业链', advantage: '优化体验' } },
+                
+                // 文档节点
+                { id: 'doc1', name: 'Apple年度报告2023', type: 'document', category: '财务报告', properties: { date: '2023-10-27', pages: '100', format: 'PDF' } },
+                { id: 'doc2', name: 'iPhone用户手册', type: 'document', category: '技术文档', properties: { version: 'iOS 17', pages: '500', language: '多语言' } },
+                { id: 'doc3', name: '设计规范指南', type: 'document', category: '设计文档', properties: { version: '2.0', focus: '人机交互' } }
+            ],
+            links: [
+                { source: 'jobs', target: 'apple', type: '创立', properties: { year: '1976', role: '联合创始人' } },
+                { source: 'cook', target: 'apple', type: '领导', properties: { role: 'CEO', since: '2011' } },
+                { source: 'apple', target: 'iphone', type: '开发', properties: { year: '2007', investment: '$150M' } },
+                { source: 'apple', target: 'macbook', type: '开发', properties: { category: '笔记本电脑' } },
+                { source: 'apple', target: 'ipad', type: '开发', properties: { year: '2010', market: '平板电脑' } },
+                { source: 'jobs', target: 'event1', type: '主持', properties: { role: '主讲人' } },
+                { source: 'event1', target: 'iphone', type: '发布', properties: { impact: '革命性' } },
+                { source: 'concept1', target: 'apple', type: '指导', properties: { application: '产品设计' } },
+                { source: 'concept2', target: 'apple', type: '定义', properties: { scope: '商业模式' } },
+                { source: 'concept3', target: 'apple', type: '实施', properties: { strategy: '核心' } },
+                { source: 'doc1', target: 'apple', type: '关于', properties: { period: '年度', content: '财务数据' } },
+                { source: 'doc2', target: 'iphone', type: '说明', properties: { purpose: '用户指导' } },
+                { source: 'event3', target: 'jobs', type: '影响', properties: { consequence: '离世' } },
+                { source: 'cook', target: 'event2', type: '主持', properties: { role: '主讲人' } }
+            ]
+        };
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查localStorage中是否有文档处理结果数据
+            const localStorageGraphData = localStorage.getItem('graphData');
+            // 检查sessionStorage中是否有查询结果数据
+            const queryGraphData = sessionStorage.getItem('queryGraphData');
+            let initialData = mockGraphData;
+            
+            if (localStorageGraphData) {
+                // 使用文档处理结果数据
+                const processingResult = JSON.parse(localStorageGraphData);
+                // 转换处理结果为图谱数据格式
+                initialData = {
+                    nodes: processingResult.entities.map(entity => ({
+                        id: entity.name.toLowerCase().replace(/\s+/g, '_'),
+                        name: entity.name,
+                        type: 'entity',
+                        category: entity.type,
+                        properties: {
+                            confidence: entity.confidence_score || entity.confidence || 0.95,
+                            source: '文档处理'
+                        }
+                    })),
+                    links: processingResult.relationships.map(rel => ({
+                        source: (rel.source_entity_name || rel.from || '').toLowerCase().replace(/\s+/g, '_'),
+                        target: (rel.target_entity_name || rel.to || '').toLowerCase().replace(/\s+/g, '_'),
+                        type: rel.type,
+                        properties: {
+                            description: rel.description || '',
+                            confidence: rel.confidence_score || rel.confidence || 0.95
+                        }
+                    }))
+                };
+                // 清除localStorage中的数据，避免重复使用
+                localStorage.removeItem('graphData');
+            } else if (queryGraphData) {
+                // 使用查询结果数据
+                initialData = JSON.parse(queryGraphData);
+                // 清除sessionStorage中的数据，避免重复使用
+                sessionStorage.removeItem('queryGraphData');
+            }
+            
+            // 更新统计信息
+            document.getElementById('node-count').textContent = initialData.nodes.length.toLocaleString();
+            document.getElementById('relationship-count').textContent = initialData.links.length.toLocaleString();
+            document.getElementById('visible-nodes').textContent = initialData.nodes.length.toLocaleString();
+            
+            initGraphVisualization(initialData);
+            initControls();
+            initAnimations();
+        });
+
+        // 初始化图谱可视化
+        function initGraphVisualization(data) {
+            // 将数据赋值给全局变量，供其他函数使用
+            graphData = data;
+            
+            const container = document.getElementById('graph-container');
+            const width = container.clientWidth;
+            const height = 600;
+
+            // 创建SVG
+            svg = d3.select('#graph-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .call(d3.zoom()
+                    .scaleExtent([0.1, 4])
+                    .on('zoom', (event) => {
+                        g.attr('transform', event.transform);
+                    }));
+
+            // 创建一个包含所有图形元素的组
+            const g = svg.append('g');
+
+            // 找到核心节点（查询主题）
+            const coreNode = data.nodes.find(node => node.properties?.is_core || node.properties?.source === 'query_topic');
+            
+            // 如果有核心节点，为其设置特殊属性
+            if (coreNode) {
+                coreNode.isCore = true;
+                coreNode.initialX = width / 2;
+                coreNode.initialY = height / 2;
+            }
+
+            // 简化节点名称，移除不必要的前缀
+            data.nodes.forEach(node => {
+                // 如果有别名，使用别名，否则简化名称
+                if (node.properties?.alias) {
+                    node.displayName = node.properties.alias;
+                } else {
+                    // 简化名称，移除类似"阿里巴巴创始人"这样的前缀
+                    let simplifiedName = node.name;
+                    if (coreNode && simplifiedName.startsWith(coreNode.name)) {
+                        simplifiedName = simplifiedName.replace(coreNode.name, '');
+                    }
+                    // 对于具体的实体名称，保持原样
+                    const specificEntities = ['马云', '张勇', '淘宝', '支付宝', '阿里云', '天猫', '菜鸟网络', '达摩院',
+                                             '马化腾', '张小龙', '微信', 'QQ', '腾讯云', '王者荣耀',
+                                             '张一鸣', '抖音', 'TikTok', '今日头条',
+                                             '史蒂夫·乔布斯', '蒂姆·库克', 'iPhone', 'iPad', 'Mac', 'iOS'];
+                    if (specificEntities.includes(node.name)) {
+                        simplifiedName = node.name;
+                    }
+                    node.displayName = simplifiedName;
+                }
+            });
+
+            // 创建力导向图，优化布局参数
+            simulation = d3.forceSimulation(data.nodes)
+                .force('link', d3.forceLink(data.links).id(d => d.id).distance(d => {
+                    // 核心节点的连接距离稍短，突出核心地位
+                    if (d.source.isCore || d.target.isCore) {
+                        return 120;
+                    }
+                    return 150;
+                }))
+                .force('charge', d3.forceManyBody().strength(d => {
+                    // 核心节点的排斥力稍强，避免过于密集
+                    if (d.isCore) {
+                        return -600;
+                    }
+                    return -500;
+                }))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => {
+                    // 核心节点的碰撞半径稍大
+                    if (d.isCore) {
+                        return 70;
+                    }
+                    return 50;
+                }));
+
+            // 关系类型颜色映射
+            const relationColorMap = {
+                '创始人': '#f59e0b', 'CEO': '#f59e0b', '高管': '#f59e0b', '员工': '#f59e0b',
+                '开发': '#3b82f6', '拥有': '#3b82f6', '发布': '#3b82f6', '销售': '#3b82f6',
+                '合作': '#10b981', '竞争': '#ef4444', '投资': '#8b5cf6', '子公司': '#6366f1', '母公司': '#6366f1',
+                '研发': '#8b5cf6', '应用': '#8b5cf6', '专利': '#8b5cf6',
+                '创立': '#f59e0b', '领导': '#f59e0b', '任职': '#f59e0b',
+                '设计': '#3b82f6', '发明': '#3b82f6',
+                '基于': '#8b5cf6', '使用': '#8b5cf6',
+                '属于': '#6366f1', '由...开发': '#6366f1',
+                '具有': '#10b981', '包含': '#10b981',
+                '应用于': '#8b5cf6', '支撑': '#8b5cf6'
+            };
+
+            // 创建连线
+            const link = g.append('g')
+                .selectAll('line')
+                .data(data.links)
+                .enter().append('line')
+                .attr('stroke', d => {
+                    // 基于关系类型设置颜色
+                    return relationColorMap[d.type] || '#64748b';
+                })
+                .attr('stroke-width', d => {
+                    // 核心节点的连接线更粗
+                    if (d.source.isCore || d.target.isCore) {
+                        return 3;
+                    }
+                    return 2;
+                })
+                .attr('stroke-opacity', 0.8);
+
+            // 创建节点组
+            const node = g.append('g')
+                .selectAll('g')
+                .data(data.nodes)
+                .enter().append('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended))
+                .on('click', showNodeDetails)
+                .on('mouseover', (event, d) => highlightNode(event, d, data))
+                .on('mouseout', unhighlightNode);
+
+            // 添加节点圆圈
+            node.append('circle')
+                .attr('r', d => {
+                    // 核心节点更大
+                    if (d.isCore) {
+                        return 25;
+                    }
+                    return 18;
+                })
+                .attr('fill', d => {
+                    // 核心节点颜色更突出
+                    if (d.isCore) {
+                        return '#06b6d4';
+                    }
+                    return getNodeColor(d.type);
+                })
+                .attr('stroke', '#fff')
+                .attr('stroke-width', d => {
+                    // 核心节点边框更粗
+                    if (d.isCore) {
+                        return 4;
+                    }
+                    return 2;
+                })
+                .attr('filter', d => {
+                    // 核心节点添加发光效果
+                    if (d.isCore) {
+                        return 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.8))';
+                    }
+                    return 'none';
+                });
+
+            // 添加节点标签，显示简化后的名称
+            node.append('text')
+                .attr('dy', d => d.isCore ? -35 : -25)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#fff')
+                .attr('font-size', d => d.isCore ? '16px' : '13px')
+                .attr('font-weight', d => d.isCore ? 'bold' : '600')
+                .attr('text-shadow', '0 0 5px rgba(0, 0, 0, 0.8)')
+                .text(d => d.displayName);
+
+            // 添加关系标签
+            const linkLabels = g.append('g')
+                .selectAll('text')
+                .data(data.links)
+                .enter().append('text')
+                .attr('class', 'link-label')
+                .attr('text-anchor', 'middle')
+                .attr('dy', -10)
+                .attr('fill', d => {
+                    // 基于关系类型设置颜色
+                    return relationColorMap[d.type] || '#94a3b8';
+                })
+                .attr('font-size', '11px')
+                .attr('font-weight', 'bold')
+                .attr('text-shadow', '0 0 3px rgba(0, 0, 0, 0.8)')
+                .text(d => d.type);
+
+            // 更新位置
+            simulation.on('tick', () => {
+                // 确保核心节点始终在中心附近
+                if (coreNode) {
+                    coreNode.x += (width / 2 - coreNode.x) * 0.15;
+                    coreNode.y += (height / 2 - coreNode.y) * 0.15;
+                }
+
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node
+                    .attr('transform', d => `translate(${d.x},${d.y})`);
+
+                linkLabels
+                    .attr('x', d => (d.source.x + d.target.x) / 2)
+                    .attr('y', d => (d.source.y + d.target.y) / 2);
+            });
+
+            // 隐藏加载指示器
+            document.getElementById('loading-indicator').style.display = 'none';
+
+            // 拖拽函数
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                // 核心节点可以自由移动
+                d.fx = null;
+                d.fy = null;
+            }
+
+            // 高亮节点连接
+            function highlightNode(event, d, graphData) {
+                const connectedNodes = new Set();
+                connectedNodes.add(d.id);
+                
+                graphData.links.forEach(link => {
+                    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+                    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+                    
+                    if (sourceId === d.id || targetId === d.id) {
+                        connectedNodes.add(sourceId);
+                        connectedNodes.add(targetId);
+                    }
+                });
+
+                node.selectAll('circle')
+                    .attr('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2)
+                    .attr('stroke-width', n => connectedNodes.has(n.id) ? (n.isCore ? 4 : 2) : 1);
+
+                node.selectAll('text')
+                    .attr('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2);
+
+                link
+                    .attr('stroke-opacity', l => {
+                        const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+                        const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+                        return (sourceId === d.id || targetId === d.id) ? 1 : 0.1;
+                    })
+                    .attr('stroke-width', l => {
+                        const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+                        const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+                        return (sourceId === d.id || targetId === d.id) ? 4 : 1;
+                    });
+
+                linkLabels
+                    .attr('opacity', l => {
+                        const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+                        const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+                        return (sourceId === d.id || targetId === d.id) ? 1 : 0.1;
+                    });
+            }
+
+            function unhighlightNode() {
+                node.selectAll('circle')
+                    .attr('opacity', 1)
+                    .attr('stroke-width', d => d.isCore ? 4 : 2);
+                node.selectAll('text').attr('opacity', 1);
+                link.attr('stroke-opacity', 0.8)
+                    .attr('stroke-width', d => d.source.isCore || d.target.isCore ? 3 : 2);
+                linkLabels.attr('opacity', 1);
+            }
+        }
+
+        // 获取节点颜色
+        function getNodeColor(type) {
+            const colors = {
+                'entity': '#3b82f6',
+                'event': '#10b981',
+                'concept': '#8b5cf6',
+                'document': '#f59e0b'
+            };
+            return colors[type] || '#6b7280';
+        }
+
+        // 显示节点详情
+        function showNodeDetails(event, d) {
+            selectedNode = d;
+            const detailsPanel = document.getElementById('node-details');
+            const nodeTitle = document.getElementById('node-title');
+            const nodeContent = document.getElementById('node-content');
+
+            nodeTitle.textContent = d.name;
+            
+            let propertiesHtml = '';
+            if (d.properties) {
+                Object.entries(d.properties).forEach(([key, value]) => {
+                    // 跳过一些内部属性
+                    if (key !== 'source' && key !== 'query') {
+                        propertiesHtml += `
+                            <div class="flex justify-between py-2 border-b border-slate-600/50">
+                                <span class="text-slate-400 capitalize">${key}:</span>
+                                <span>${typeof value === 'object' ? JSON.stringify(value) : value}</span>
+                            </div>
+                        `;
+                    }
+                });
+            }
+
+            // 获取相关连接
+            const connections = getRelatedConnections(d);
+
+            nodeContent.innerHTML = `
+                <div class="mb-4">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <span class="node-type-badge" style="background: ${getNodeColor(d.type)}20; color: ${getNodeColor(d.type)};">
+                            ${d.category}
+                        </span>
+                        <span class="text-xs text-slate-400">类型: ${d.type}</span>
+                    </div>
+                    <div class="text-sm text-slate-400">
+                        来源: ${d.properties?.source || '知识图谱'}
+                    </div>
+                    ${d.properties?.query ? `<div class="text-sm text-slate-400">查询关键词: ${d.properties.query}</div>` : ''}
+                </div>
+                
+                <div class="mb-4">
+                    <h4 class="font-medium mb-2 text-cyan-400">属性信息</h4>
+                    ${propertiesHtml || '<p class="text-slate-400 text-sm">暂无属性信息</p>'}
+                </div>
+                
+                <div class="mb-4">
+                    <h4 class="font-medium mb-2 text-cyan-400">相关连接</h4>
+                    <div class="space-y-1 text-sm">
+                        ${connections.length > 0 ? connections.map(conn => `
+                            <div class="flex items-center justify-between bg-slate-700/30 rounded px-2 py-1">
+                                <span>${conn.node}</span>
+                                <span class="text-xs px-2 py-1 bg-cyan-600/30 rounded">${conn.type}</span>
+                            </div>
+                        `).join('') : '<p class="text-slate-400 text-sm">暂无相关连接</p>'}
+                    </div>
+                </div>
+                
+                <div class="flex space-x-2">
+                    <button onclick="expandNode()" class="flex-1 px-3 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm transition-colors">
+                        展开节点
+                    </button>
+                    <button onclick="focusOnNode()" class="flex-1 px-3 py-2 bg-slate-600 hover:bg-slate-700 rounded text-sm transition-colors">
+                        聚焦节点
+                    </button>
+                </div>
+            `;
+
+            detailsPanel.classList.remove('hidden');
+
+            // 添加显示动画
+            anime({
+                targets: detailsPanel,
+                translateX: [300, 0],
+                opacity: [0, 1],
+                duration: 300,
+                easing: 'easeOutQuart'
+            });
+        }
+
+        // 获取相关连接
+        function getRelatedConnections(node) {
+            const connections = [];
+            // 使用当前图谱数据，通过模拟数据的结构访问
+            const currentGraphData = graphData || mockGraphData;
+            
+            currentGraphData.links.forEach(link => {
+                const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+                const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+                
+                if (sourceId === node.id) {
+                    connections.push({
+                        node: typeof link.target === 'string' ? link.target : link.target.name,
+                        type: link.type
+                    });
+                } else if (targetId === node.id) {
+                    connections.push({
+                        node: typeof link.source === 'string' ? link.source : link.source.name,
+                        type: link.type
+                    });
+                }
+            });
+            return connections.slice(0, 5); // 最多显示5个连接
+        }
+
+        // 关闭节点详情
+        function closeNodeDetails() {
+            const detailsPanel = document.getElementById('node-details');
+            anime({
+                targets: detailsPanel,
+                translateX: [0, 300],
+                opacity: [1, 0],
+                duration: 300,
+                easing: 'easeInQuart',
+                complete: () => {
+                    detailsPanel.classList.add('hidden');
+                }
+            });
+        }
+
+        // 初始化控制功能
+        function initControls() {
+            // 搜索功能
+            const searchInput = document.getElementById('node-search');
+            searchInput.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                filterNodes(searchTerm);
+            });
+
+            // 类型筛选
+            const filterCheckboxes = document.querySelectorAll('.node-filter');
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateNodeVisibility();
+                });
+            });
+        }
+
+        // 筛选节点
+        function filterNodes(searchTerm) {
+            const nodes = d3.selectAll('.node');
+            nodes.attr('opacity', d => 
+                d.name.toLowerCase().includes(searchTerm) ? 1 : 0.1
+            );
+
+            const links = d3.selectAll('line');
+            links.attr('stroke-opacity', 0.1);
+
+            const labels = d3.selectAll('.link-label');
+            labels.attr('opacity', 0.1);
+
+            // 更新可见节点计数
+            const currentNodes = d3.selectAll('.node').data();
+            const visibleCount = currentNodes.filter(node => 
+                node.name.toLowerCase().includes(searchTerm)
+            ).length;
+            document.getElementById('visible-nodes').textContent = visibleCount;
+        }
+
+        // 更新节点可见性
+        function updateNodeVisibility() {
+            const checkedTypes = Array.from(document.querySelectorAll('.node-filter:checked'))
+                .map(cb => cb.dataset.type);
+
+            const nodes = d3.selectAll('.node');
+            nodes.attr('opacity', d => 
+                checkedTypes.includes(d.type) ? 1 : 0.1
+            );
+
+            const links = d3.selectAll('line');
+            links.attr('stroke-opacity', 0.6);
+
+            const labels = d3.selectAll('.link-label');
+            labels.attr('opacity', 1);
+
+            // 更新可见节点计数
+            const currentNodes = d3.selectAll('.node').data();
+            const visibleCount = currentNodes.filter(node => 
+                checkedTypes.includes(node.type)
+            ).length;
+            document.getElementById('visible-nodes').textContent = visibleCount;
+        }
+
+        // 控制函数
+        function resetGraphView() {
+            simulation.alpha(1).restart();
+        }
+
+        function centerGraph() {
+            const width = document.getElementById('graph-container').clientWidth;
+            const height = 600;
+            simulation.force('center', d3.forceCenter(width / 2, height / 2));
+            simulation.alpha(1).restart();
+        }
+
+        function toggleLayout() {
+            currentLayout = currentLayout === 'force' ? 'circular' : 'force';
+            if (currentLayout === 'circular') {
+                const width = document.getElementById('graph-container').clientWidth;
+                const height = 600;
+                const radius = Math.min(width, height) / 3;
+                const centerX = width / 2;
+                const centerY = height / 2;
+                
+                mockGraphData.nodes.forEach((node, i) => {
+                    const angle = (i / mockGraphData.nodes.length) * 2 * Math.PI;
+                    node.fx = centerX + radius * Math.cos(angle);
+                    node.fy = centerY + radius * Math.sin(angle);
+                });
+            } else {
+                mockGraphData.nodes.forEach(node => {
+                    node.fx = null;
+                    node.fy = null;
+                });
+            }
+            simulation.alpha(1).restart();
+        }
+
+        function zoomIn() {
+            const currentTransform = d3.zoomTransform(svg.node());
+            svg.transition().duration(300).call(
+                d3.zoom().transform,
+                d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(currentTransform.k * 1.2)
+            );
+        }
+
+        function zoomOut() {
+            const currentTransform = d3.zoomTransform(svg.node());
+            svg.transition().duration(300).call(
+                d3.zoom().transform,
+                d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(currentTransform.k / 1.2)
+            );
+        }
+
+        function toggleFullscreen() {
+            const container = document.getElementById('graph-container');
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                container.requestFullscreen();
+            }
+        }
+
+        function expandNode() {
+            if (selectedNode) {
+                alert(`展开节点: ${selectedNode.name} (功能开发中)`);
+            }
+        }
+
+        function focusOnNode() {
+            if (selectedNode) {
+                const width = document.getElementById('graph-container').clientWidth;
+                const height = 600;
+                
+                mockGraphData.nodes.forEach(node => {
+                    node.fx = null;
+                    node.fy = null;
+                });
+                
+                selectedNode.fx = width / 2;
+                selectedNode.fy = height / 2;
+                
+                simulation.alpha(1).restart();
+                
+                setTimeout(() => {
+                    selectedNode.fx = null;
+                    selectedNode.fy = null;
+                }, 2000);
+            }
+        }
+
+        // 初始化动画
+        function initAnimations() {
+            // 页面加载动画
+            anime({
+                targets: 'main > div > *',
+                translateY: [30, 0],
+                opacity: [0, 1],
+                delay: anime.stagger(100),
+                duration: 600,
+                easing: 'easeOutQuart'
+            });
+        }
+    </script>
+    
+    <!-- 引入粒子背景特效 -->
+    <script src="main.js"></script>
+</body>
+</html>

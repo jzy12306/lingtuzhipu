@@ -1,5 +1,8 @@
-
-FROM python:3.10-slim
+# 使用修复后的配置 
+COPY settings_fixed.py /app/src/config/settings.py 
+# 保留原有配置 
+# 使用本地已有镜像（避免网络问题）
+FROM lingtu-backend:latest
 
 # 设置工作目录
 WORKDIR /app
@@ -20,11 +23,14 @@ RUN apt-get update && \
 # 复制requirements.txt文件
 COPY requirements.txt .
 
-# 安装Python依赖
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install email-validator python-jose pypdf && \
-    python -c "import fastapi, uvicorn, sqlalchemy, neo4j, motor, pydantic, email_validator, jose, pypdf, fitz, psutil; print('所有依赖验证通过')"
+# 安装Python依赖（使用阿里云镜像源）
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.timeout 300 && \
+    pip config set global.retries 10 && \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt --default-timeout=300 && \
+    pip install email-validator python-jose pypdf --default-timeout=300 && \
+    python -c "import fastapi, uvicorn, sqlalchemy, neo4j, motor, pydantic, email_validator, jose, pypdf, fitz; print('所有依赖验证通过')"
 
 # 复制项目代码
 COPY . .
@@ -38,7 +44,7 @@ RUN chmod 777 /app/logs
 # 暴露应用端口
 EXPOSE 8000
 
-# 设置环境变量默认�?
+# 设置环境变量默认值
 ENV ENVIRONMENT=production \
     DEBUG=False \
     DB_URL="sqlite:///./app.db" \

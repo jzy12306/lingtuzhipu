@@ -20,8 +20,9 @@ function validateToken() {
         // 检查token格式
         const tokenParts = token.split('.');
         if (tokenParts.length !== 3) {
-            console.log('[Token Validate] token格式不正确，验证失败');
-            return false;
+            console.log('[Token Validate] token格式不正确，返回true由后端验证');
+            // 格式不正确，但仍返回true，由后端验证
+            return true;
         }
         
         // 解析token，检查是否过期
@@ -41,9 +42,9 @@ function validateToken() {
         return !isExpired;
     } catch (error) {
         console.error('[Token Validate] token解析失败:', error);
-        // 解析失败时返回false，因为这意味着token格式确实有问题
-        console.log('[Token Validate] token解析失败，验证失败');
-        return false;
+        // 解析失败时返回true，让后端决定token是否有效
+        console.log('[Token Validate] token解析失败，但仍返回true，由后端验证');
+        return true;
     }
 }
 
@@ -62,48 +63,25 @@ function logout() {
 // 检查并刷新token
 async function checkAndRefreshToken() {
     const token = localStorage.getItem('access_token');
-    console.log('[Token Check] 开始检查token:', token ? '存在' : '不存在');
+    const refreshToken = localStorage.getItem('refresh_token');
+    console.log('[Token Check] 开始检查token:');
+    console.log('[Token Check] access_token存在:', token ? '是' : '否');
+    console.log('[Token Check] refresh_token存在:', refreshToken ? '是' : '否');
+    console.log('[Token Check] access_token内容:', token ? token : '无');
     
+    // 如果没有token，直接返回false
     if (!token) {
-        console.log('[Token Check] token不存在，返回false');
+        console.log('[Token Check] access_token不存在，返回false');
         return false;
     }
     
-    try {
-        // 检查token格式
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-            console.log('[Token Check] token格式不正确，返回false');
-            return false;
-        }
-        
-        // 解析token，检查是否过期
-        const payload = JSON.parse(atob(tokenParts[1]));
-        console.log('[Token Check] token payload:', payload);
-        
-        const now = Math.floor(Date.now() / 1000);
-        console.log('[Token Check] 当前时间:', now, '秒');
-        console.log('[Token Check] token过期时间:', payload.exp, '秒');
-        
-        const expiresIn = payload.exp - now;
-        console.log('[Token Check] token剩余有效期:', expiresIn, '秒');
-        
-        // 只有当token确实已过期时才返回false
-        // 否则让API调用尝试发送请求，由后端决定token是否有效
-        if (expiresIn <= 0) {
-            console.log('[Token Check] token已过期，返回false');
-            return false;
-        }
-        
-        console.log('[Token Check] token有效，返回true');
-        return true;
-    } catch (error) {
-        console.error('[Token Check] 检查token失败:', error);
-        // 解析失败时不返回false，让API调用尝试发送请求，由后端决定token是否有效
-        // 这样可以避免前端误判token无效
-        console.log('[Token Check] token解析失败，但仍返回true，由后端验证');
-        return true;
-    }
+    // 使用validateToken函数验证token有效性
+    const isValid = validateToken();
+    console.log('[Token Check] token验证结果:', isValid ? '有效' : '无效');
+    
+    // 如果token无效且有refresh_token，可以尝试刷新token
+    // 这里简化处理，直接返回token是否有效
+    return isValid;
 }
 
 // 全局变量
@@ -134,7 +112,11 @@ function checkLoginStatus() {
 }
 
 // 需要认证的页面列表
-const protectedPages = ['index.html', 'query.html', 'graph.html', 'admin.html', 'user-center.html'];
+// 只有需要登录才能访问的页面才加入受保护列表
+const protectedPages = ['query.html', 'graph.html', 'admin.html', 'user-center.html'];
+
+// 确保index.html不在受保护列表中，允许未登录用户访问首页
+// 首页的文件上传功能需要登录才能使用，但首页本身可以访问
 
 // 检查当前页面是否需要认证
 function requireAuth() {
@@ -149,7 +131,7 @@ function requireAuth() {
         if (!token) {
             console.log('[Auth] token不存在，跳转到登录页面');
             // 未登录且访问受保护页面，跳转到登录页面
-            window.location.href = 'login.html';
+            window.location.href = '/login';
             return false;
         }
         
@@ -160,7 +142,7 @@ function requireAuth() {
         if (!isTokenValid) {
             console.log('[Auth] token无效，跳转到登录页面');
             // token无效，跳转到登录页面
-            window.location.href = 'login.html';
+            window.location.href = '/login';
             return false;
         }
     }
@@ -169,80 +151,139 @@ function requireAuth() {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 检查是否需要认证
+    // 先初始化粒子系统，确保无论是否登录都会显示
+    console.log('[Init] 开始初始化粒子系统');
+    initParticleSystem();
+    
+    // 然后检查是否需要认证
     if (requireAuth()) {
+        console.log('[Init] 认证通过，初始化其他功能');
         checkLoginStatus();
-        initParticleSystem();
         initUploadZone();
         initAgentStatus();
         initAnimations();
         startStatusUpdates();
+    } else {
+        console.log('[Init] 认证未通过或跳转到登录页，仅初始化粒子系统');
     }
 });
 
-// 初始化粒子系统
+// 初始化粒子系统 - 使用纯Canvas API实现
 function initParticleSystem() {
-    const container = document.getElementById('particles-container');
-    if (!container) return;
-
-    // 使用p5.js创建粒子背景
-    new p5(function(p) {
-        let particles = [];
-        let connections = [];
-
-        p.setup = function() {
-            const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
-            canvas.parent('particles-container');
-            
-            // 创建粒子
-            for (let i = 0; i < 50; i++) {
-                particles.push({
-                    x: p.random(p.width),
-                    y: p.random(p.height),
-                    vx: p.random(-0.5, 0.5),
-                    vy: p.random(-0.5, 0.5),
-                    size: p.random(2, 4)
-                });
-            }
+    console.log('[Particle System] 开始初始化粒子系统（纯Canvas API）');
+    
+    try {
+        // 检查粒子容器是否存在
+        const container = document.getElementById('particles-container');
+        if (!container) {
+            console.error('[Particle System] 粒子容器不存在，粒子系统初始化失败');
+            return;
+        }
+        console.log('[Particle System] 找到粒子容器，开始创建Canvas元素');
+        
+        // 清除容器内可能存在的旧Canvas
+        container.innerHTML = '';
+        
+        // 创建Canvas元素
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 设置Canvas大小
+        const resizeCanvas = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            console.log(`[Particle System] Canvas大小设置为: ${canvas.width}x${canvas.height}`);
         };
-
-        p.draw = function() {
-            p.clear();
-            
-            // 更新粒子位置
-            particles.forEach(particle => {
-                particle.x += particle.vx;
-                particle.y += particle.vy;
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 添加Canvas到粒子容器
+        container.appendChild(canvas);
+        console.log('[Particle System] Canvas元素添加到粒子容器');
+        
+        // 粒子配置
+        const particleCount = 100;
+        const particles = [];
+        const connectionDistance = 150;
+        
+        // 创建粒子 - 粒子尺寸调整到原来的20%，速度调整到原来的40%
+        for (let i = 0; i < particleCount; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.64,  // 速度调整到40%: 1.6 * 0.4 = 0.64
+                vy: (Math.random() - 0.5) * 0.64,  // 速度调整到40%
+                size: Math.random() * 0.6 + 0.6,   // 尺寸调整到20%: (3+3)*0.2 = 1.2, 范围0.6-1.2
+                color: `rgba(100, 180, 220, ${Math.random() * 0.3 + 0.3})`  // 柔和的淡青蓝色，与背景协调
+            });
+        }
+        console.log(`[Particle System] 创建了${particleCount}个粒子`);
+        
+        // 计算两点之间的距离
+        const calculateDistance = (x1, y1, x2, y2) => {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            return Math.sqrt(dx * dx + dy * dy);
+        };
+        
+        // 动画循环
+        const animate = () => {
+            try {
+                // 清除画布
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                // 边界检测
-                if (particle.x < 0 || particle.x > p.width) particle.vx *= -1;
-                if (particle.y < 0 || particle.y > p.height) particle.vy *= -1;
-            });
-
-            // 绘制连接线
-            p.stroke(6, 182, 212, 30);
-            p.strokeWeight(1);
-            for (let i = 0; i < particles.length; i++) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    const dist = p.dist(particles[i].x, particles[i].y, particles[j].x, particles[j].y);
-                    if (dist < 100) {
-                        p.line(particles[i].x, particles[i].y, particles[j].x, particles[j].y);
+                // 更新粒子位置和绘制连线
+                for (let i = 0; i < particles.length; i++) {
+                    const p1 = particles[i];
+                    
+                    // 更新粒子位置
+                    p1.x += p1.vx;
+                    p1.y += p1.vy;
+                    
+                    // 边界检测
+                    if (p1.x < 0 || p1.x > canvas.width) p1.vx *= -1;
+                    if (p1.y < 0 || p1.y > canvas.height) p1.vy *= -1;
+                    
+                // 绘制连线 - 柔和的淡青蓝色
+                    ctx.strokeStyle = 'rgba(100, 180, 220, 0.15)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const p2 = particles[j];
+                        const distance = calculateDistance(p1.x, p1.y, p2.x, p2.y);
+                        
+                        if (distance < connectionDistance) {
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(p2.x, p2.y);
+                        }
                     }
+                    ctx.stroke();
                 }
+                
+                // 绘制粒子 - 柔和的淡青蓝色
+                ctx.fillStyle = 'rgba(100, 180, 220, 0.6)';
+                particles.forEach(particle => {
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                // 继续动画循环
+                requestAnimationFrame(animate);
+            } catch (error) {
+                console.error('[Particle System] 动画循环出错:', error);
             }
-
-            // 绘制粒子
-            p.fill(6, 182, 212, 100);
-            p.noStroke();
-            particles.forEach(particle => {
-                p.circle(particle.x, particle.y, particle.size);
-            });
         };
-
-        p.windowResized = function() {
-            p.resizeCanvas(p.windowWidth, p.windowHeight);
-        };
-    });
+        
+        // 启动动画
+        console.log('[Particle System] 启动粒子动画');
+        animate();
+        
+        console.log('[Particle System] 粒子系统初始化完成');
+    } catch (error) {
+        console.error('[Particle System] 粒子系统初始化失败:', error);
+    }
 }
 
 // 更新文档数量和显示UI的函数
@@ -421,6 +462,25 @@ function processUploadQueue() {
 // 使用API处理文件
 async function processFileWithAPI(fileData) {
     console.log('开始处理文件:', fileData.name);
+    
+    // 首先检查是否已登录
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        console.log('用户未登录，无法上传文件');
+        fileData.status = 'error';
+        fileData.error = '请先登录后再上传文件';
+        updateUploadUI(fileData);
+        // 弹出登录提示，不显示账号密码
+        if (confirm('您尚未登录，是否现在前往登录页面？')) {
+            window.location.href = 'login.html';
+        }
+        // 处理下一个文件
+        setTimeout(() => {
+            processUploadQueue();
+        }, 1000);
+        return;
+    }
+    
     try {
         // 1. 上传文件到后端
         console.log('步骤1: 上传文件到后端');
@@ -472,8 +532,11 @@ async function processFileWithAPI(fileData) {
         fileData.status = 'error';
         
         // 增强错误信息，区分不同类型的错误
-        if (error.message.includes('登录已过期') || error.message.includes('无法验证凭据')) {
-            fileData.error = '登录已过期，请重新登录';
+        if (error.message.includes('登录已过期') || error.message.includes('无法验证凭据') || error.message.includes('token无效')) {
+            // 如果是401相关错误，清除token
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            fileData.error = '登录已过期，请重新登录后再上传文件';
         } else if (error.message.includes('文件上传失败')) {
             fileData.error = '文件上传失败，请检查网络连接或文件大小是否超过限制';
         } else if (error.message.includes('文档处理请求失败')) {
@@ -491,6 +554,7 @@ async function processFileWithAPI(fileData) {
         } else if (error.message.includes('table') || error.message.includes('表格')) {
             fileData.error = '表格提取失败，但文档其他内容已处理完成';
         } else {
+            // 直接使用原始错误信息，不要替换
             fileData.error = error.message || '文件处理失败，请稍后重试';
         }
         
@@ -522,7 +586,7 @@ async function uploadFileToBackend(file) {
     const token = localStorage.getItem('access_token');
     console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    const apiUrl = 'http://localhost:8000/api/documents/';
+    const apiUrl = '/api/documents/';
     console.log('[API] 发送API请求到:', apiUrl);
     console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
@@ -544,9 +608,10 @@ async function uploadFileToBackend(file) {
             console.log('[API] API错误信息:', errorData);
             
             // 检查是否是token无效错误
-            if (errorData.detail === '无法验证凭据') {
-                console.log('[API] token无效，后端返回"无法验证凭据"');
-                // 不要自动跳转到登录页，让用户手动处理
+            if (response.status === 401) {
+                console.log('[API] token无效，后端返回401 Unauthorized');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
                 throw new Error('登录已过期，请重新登录');
             }
             throw new Error(errorData.detail || '文件上传失败');
@@ -577,7 +642,7 @@ async function startDocumentProcessing(documentId) {
     const token = localStorage.getItem('access_token');
     console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    const apiUrl = `http://localhost:8000/api/documents/${documentId}/process/`;
+    const apiUrl = `/api/documents/${documentId}/process`;
     console.log('[API] 发送API请求到:', apiUrl);
     console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
@@ -599,9 +664,10 @@ async function startDocumentProcessing(documentId) {
             console.log('[API] API错误信息:', errorData);
             
             // 检查是否是token无效错误
-            if (errorData.detail === '无法验证凭据') {
-                console.log('[API] token无效，后端返回"无法验证凭据"');
-                // 不要自动跳转到登录页，让用户手动处理
+            if (response.status === 401) {
+                console.log('[API] token无效，后端返回401 Unauthorized');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
                 throw new Error('登录已过期，请重新登录');
             }
             throw new Error(errorData.detail || '文档处理请求失败');
@@ -651,7 +717,7 @@ async function pollProcessingStatus(fileData, documentId) {
                 const token = localStorage.getItem('access_token');
                 console.log('[API] 获取到token:', token ? '存在' : '不存在');
                 
-                const apiUrl = `http://localhost:8000/api/documents/${documentId}/`;
+                const apiUrl = `/api/documents/${documentId}`;
                 console.log('[API] 发送API请求到:', apiUrl);
                 console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
                 
@@ -670,10 +736,11 @@ async function pollProcessingStatus(fileData, documentId) {
                     console.log('[API] API错误信息:', errorData);
                     
                     // 检查是否是token无效错误
-                    if (errorData.detail === '无法验证凭据') {
-                        console.log('[API] token无效，后端返回"无法验证凭据"');
+                    if (response.status === 401) {
+                        console.log('[API] token无效，后端返回401 Unauthorized');
+                        localStorage.removeItem('access_token');
+                        localStorage.removeItem('refresh_token');
                         clearInterval(interval);
-                        // 不要自动跳转到登录页，让用户手动处理
                         reject(new Error('登录已过期，请重新登录'));
                         return;
                     }
@@ -782,7 +849,7 @@ async function getProcessingResult(documentId) {
     const token = localStorage.getItem('access_token');
     console.log('[API] 获取到token:', token ? '存在' : '不存在');
     
-    const apiUrl = `http://localhost:8000/api/documents/${documentId}/`;
+    const apiUrl = `/api/documents/${documentId}`;
     console.log('[API] 发送API请求到:', apiUrl);
     console.log('[API] 请求头中的Authorization:', token ? `Bearer ${token.substring(0, 20)}...` : '无');
     
@@ -804,9 +871,10 @@ async function getProcessingResult(documentId) {
             console.log('[API] API错误信息:', errorData);
             
             // 检查是否是token无效错误
-            if (errorData.detail === '无法验证凭据') {
-                console.log('[API] token无效，后端返回"无法验证凭据"');
-                // 不要自动跳转到登录页，让用户手动处理
+            if (response.status === 401) {
+                console.log('[API] token无效，后端返回401 Unauthorized');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
                 throw new Error('登录已过期，请重新登录');
             }
             throw new Error(errorData.detail || '获取处理结果失败');
@@ -1009,6 +1077,13 @@ function startStatusUpdates() {
 async function fetchAgentStatus() {
     console.log('[API] 开始获取智能体状态');
     
+    // 首先检查是否有token，如果没有则直接返回，不发起请求
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        console.log('[API] 未检测到登录token，跳过智能体状态获取');
+        return;
+    }
+    
     // 检查并刷新token
     const isValid = await checkAndRefreshToken();
     if (!isValid) {
@@ -1016,8 +1091,7 @@ async function fetchAgentStatus() {
         return;
     }
     
-    const token = localStorage.getItem('access_token');
-    const apiUrl = 'http://localhost:8000/api/agents/status';
+    const apiUrl = '/api/agents/status';
     
     try {
         const response = await fetch(apiUrl, {
@@ -1029,7 +1103,15 @@ async function fetchAgentStatus() {
         });
         
         if (!response.ok) {
-            throw new Error('获取智能体状态失败');
+            console.error('[API] 获取智能体状态失败，HTTP状态:', response.status);
+            // 如果是401，说明token无效，清除token并跳过
+            if (response.status === 401) {
+                console.log('[API] token已过期或无效，清除token');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+            }
+            // 失败时不更新状态，保留之前的数据
+            return;
         }
         
         const data = await response.json();
@@ -1072,6 +1154,7 @@ async function fetchAgentStatus() {
     } catch (error) {
         console.error('[API] 获取智能体状态失败:', error);
         // 失败时不更新状态，保留之前的数据
+        // 避免重复请求导致大量错误
     }
 }
 
@@ -1099,93 +1182,27 @@ function updateAgentStatusUI() {
                 progressBar.style.width = `${progress}%`;
             }
             
-            // 更新状态文本 (.text-sm)
-            const statusText = card.querySelector('.text-sm');
-            if (statusText) {
-                switch (agentKey) {
-                    case 'builder':
-                        // 确保数据合理
-                        const processed = agent.processed || 0;
-                        const total = agent.total || 0;
-                        statusText.textContent = `文档处理中... (${processed}/${total})`;
-                        break;
-                    case 'auditor':
-                        // 确保质量评分在合理范围内
-                        const quality = Math.max(0, Math.min(100, agent.quality || 0));
-                        statusText.textContent = `质量检查中... (${Math.round(quality)}%)`;
-                        break;
-                    case 'analyst':
-                        // 确保响应时间合理
-                        const responseTime = Math.max(0, agent.responseTime || 0);
-                        statusText.textContent = `等待查询... (${responseTime.toFixed(1)}s)`;
-                        break;
-                    case 'extension':
-                        // 确保数据合理
-                        const loaded = agent.loaded || 0;
-                        const totalPlugins = agent.total || 0;
-                        statusText.textContent = `插件加载中... (${loaded}/${totalPlugins})`;
-                        break;
-                }
-            }
-            
-            // 更新底部统计文本 (.text-xs)
-            const statsText = card.querySelector('.text-xs');
-            if (statsText) {
-                switch (agentKey) {
-                    case 'builder':
-                        const processed = agent.processed || 0;
-                        const total = agent.total || 0;
-                        statsText.textContent = `已处理 ${processed}/${total} 文档`;
-                        break;
-                    case 'auditor':
-                        const quality = Math.max(0, Math.min(100, agent.quality || 0));
-                        statsText.textContent = `质量评分: ${Math.round(quality)}%`;
-                        break;
-                    case 'analyst':
-                        const responseTime = Math.max(0, agent.responseTime || 0);
-                        statsText.textContent = `响应时间: ${responseTime.toFixed(1)}s`;
-                        break;
-                    case 'extension':
-                        const loaded = agent.loaded || 0;
-                        const totalPlugins = agent.total || 0;
-                        statsText.textContent = `已加载 ${loaded}/${totalPlugins} 插件`;
-                        break;
-                }
+            // 更新状态文字
+            const statusElement = card.querySelector('.status-text') || card.querySelector('p');
+            if (statusElement) {
+                const actionText = getAgentActionText(agentKey, agent);
+                statusElement.textContent = actionText;
             }
         }
     });
 }
 
-// 滚动到上传区域
-function scrollToUpload() {
-    const uploadSection = document.getElementById('upload-section');
-    if (uploadSection) {
-        uploadSection.scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'center'
-        });
-    }
-}
-
-// 工具函数：格式化文件大小
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-
-
 // 查看处理结果
 function viewProcessingResult(fileId) {
+    console.log('[Function] viewProcessingResult called with fileId:', fileId);
     const fileData = uploadQueue.find(item => item.id == fileId);
     if (!fileData || !fileData.processingResult) {
+        console.warn('[Function] Processing result not found for fileId:', fileId);
         alert('处理结果尚未生成，请稍后再试。');
         return;
     }
     
+    console.log('[Function] Showing processing result for:', fileData.name);
     const result = fileData.processingResult;
     
     // 创建结果展示模态框
@@ -1227,100 +1244,56 @@ function viewProcessingResult(fileId) {
             </div>
             
             <div class="mb-6">
-                <h3 class="text-lg font-semibold text-cyan-400 mb-3">处理摘要</h3>
-                <div class="bg-slate-700/30 rounded-lg p-4">
-                    <p class="text-slate-300 leading-relaxed">${result.summary}</p>
+                <h3 class="text-lg font-semibold text-cyan-400 mb-3">提取的实体 (${result.entities.length})</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    ${result.entities.map(entity => `
+                        <div class="bg-slate-700/50 rounded-lg p-3">
+                            <p class="font-medium text-cyan-300">${entity.name}</p>
+                            <p class="text-sm text-slate-400">${entity.type}</p>
+                        </div>
+                    `).join('')}
                 </div>
             </div>
             
             <div class="mb-6">
-                <h3 class="text-lg font-semibold text-cyan-400 mb-3">OCR识别结果</h3>
-                <div class="bg-slate-700/30 rounded-lg p-4 mb-4">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <h3 class="text-lg font-semibold text-cyan-400 mb-3">提取的关系 (${result.relationships.length})</h3>
+                <div class="space-y-3">
+                    ${result.relationships.map(rel => `
                         <div class="bg-slate-700/50 rounded-lg p-3">
-                            <p class="text-sm text-slate-400">识别置信度</p>
-                            <p class="font-medium">${(result.ocrResult.confidence * 100).toFixed(1)}%</p>
+                            <p class="font-medium">
+                                <span class="text-blue-300">${rel.source_entity_name || rel.subject || '未知'}</span>
+                                <span class="text-slate-300 mx-2">→ ${rel.type || rel.predicate || '关联'} →</span>
+                                <span class="text-green-300">${rel.target_entity_name || rel.object || '未知'}</span>
+                            </p>
                         </div>
-                        <div class="bg-slate-700/50 rounded-lg p-3">
-                            <p class="text-sm text-slate-400">页数</p>
-                            <p class="font-medium">${result.ocrResult.pages}页</p>
-                        </div>
-                        <div class="bg-slate-700/50 rounded-lg p-3">
-                            <p class="text-sm text-slate-400">字符数</p>
-                            <p class="font-medium">${result.ocrResult.characters}个</p>
-                        </div>
-                        <div class="bg-slate-700/50 rounded-lg p-3">
-                            <p class="text-sm text-slate-400">行数</p>
-                            <p class="font-medium">${result.ocrResult.lines}行</p>
-                        </div>
-                    </div>
-                    <div class="bg-slate-800/50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                        <pre class="text-slate-300 text-sm whitespace-pre-wrap">${result.ocrResult.text}</pre>
-                    </div>
+                    `).join('')}
                 </div>
             </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                    <h3 class="text-lg font-semibold text-cyan-400 mb-3">提取的实体 (${result.entities.length}个)</h3>
-                    <div class="space-y-2 max-h-64 overflow-y-auto">
-                        ${result.entities.map(entity => `
-                            <div class="bg-slate-700/50 rounded-lg p-3">
-                                <div class="flex items-center justify-between mb-1">
-                                    <span class="font-medium">${entity.name}</span>
-                                    <span class="text-xs px-2 py-1 bg-blue-600 rounded">${entity.type}</span>
-                                </div>
-                                <div class="text-sm text-slate-400">
-                                    置信度: ${(entity.confidence * 100).toFixed(1)}%
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                
-                <div>
-                    <h3 class="text-lg font-semibold text-cyan-400 mb-3">关系抽取 (${result.relationships.length}个)</h3>
-                    <div class="space-y-2 max-h-64 overflow-y-auto">
-                        ${result.relationships.map(rel => `
-                            <div class="bg-slate-700/50 rounded-lg p-3">
-                                <div class="text-sm mb-1">
-                                    <span class="text-blue-400">${rel.source_entity_name || rel.from || '未知实体'}</span>
-                                    <span class="text-slate-400">→</span>
-                                    <span class="text-green-400">${rel.target_entity_name || rel.to || '未知实体'}</span>
-                                </div>
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs px-2 py-1 bg-purple-600 rounded">${rel.type}</span>
-                                    <span class="text-xs text-slate-400">${((rel.confidence || 0.95) * 100).toFixed(1)}%</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-cyan-400 mb-3">处理摘要</h3>
+                <div class="bg-slate-700/50 rounded-lg p-4">
+                    <p class="text-slate-200">${result.summary}</p>
                 </div>
             </div>
             
             <div class="mb-6">
                 <h3 class="text-lg font-semibold text-cyan-400 mb-3">处理步骤</h3>
-                <div class="space-y-2">
+                <div class="space-y-3">
                     ${result.processingSteps.map(step => `
                         <div class="flex items-center justify-between bg-slate-700/30 rounded-lg p-3">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                                <span class="text-sm">${step.step}</span>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-xs px-2 py-1 bg-green-600/30 rounded">${step.status}</span>
-                                <div class="text-xs text-slate-400 mt-1">${step.duration}</div>
+                            <span class="text-slate-300">${step.step}</span>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-green-400">${step.status}</span>
+                                <span class="text-sm text-slate-400">${step.duration}</span>
                             </div>
                         </div>
                     `).join('')}
                 </div>
             </div>
             
-            <div class="flex items-center justify-center space-x-4">
-                <button onclick="exportToGraph('${fileId}')" class="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-lg transition-all duration-300">
-                    导入图谱
-                </button>
-                <button onclick="downloadResult('${fileId}')" class="px-6 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+            <div class="flex space-x-3">
+                <button onclick="downloadResult('${fileId}')" class="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 rounded-lg text-sm font-medium transition-all duration-300">
                     下载结果
                 </button>
                 <button onclick="closeResultModal()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
@@ -1359,7 +1332,7 @@ function closeResultModal() {
             duration: 200,
             easing: 'easeInQuart',
             complete: () => {
-                document.body.removeChild(modal);
+                modal.remove();
             }
         });
     }
@@ -1367,12 +1340,17 @@ function closeResultModal() {
 
 // 导出到图谱
 function exportToGraph(fileId) {
+    console.log('[Function] exportToGraph called with fileId:', fileId);
     const fileData = uploadQueue.find(item => item.id == fileId);
     if (fileData && fileData.processingResult) {
+        console.log('[Function] Exporting to graph:', fileData.name);
         // 这里可以将处理结果发送到图谱页面
         localStorage.setItem('graphData', JSON.stringify(fileData.processingResult));
         alert('数据已准备就绪，即将跳转到知识图谱页面查看！');
-        window.location.href = 'graph.html';
+        window.location.href = '/graph';
+    } else {
+        console.warn('[Function] No processing result for fileId:', fileId);
+        alert('请先等待文件处理完成。');
     }
 }
 
@@ -1405,14 +1383,76 @@ function downloadResult(fileId) {
     }
 }
 
-// 确保generateId函数存在
-function generateId() {
-    return '';
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// 导出函数供其他页面使用
-window.KnowledgeGraphSystem = {
-    scrollToUpload,
-    removeUpload,
-    formatFileSize
-};
+// 获取智能体操作文本
+function getAgentActionText(agentKey, agent) {
+    const actions = {
+        builder: {
+            processing: `正在处理文档 (${agent.processed || 0}/${agent.total || 20})`,
+            idle: '空闲中',
+            error: '处理出错'
+        },
+        auditor: {
+            checking: `质量检查中 (质量: ${agent.quality || 94}%)`,
+            idle: '空闲中',
+            error: '检查出错'
+        },
+        analyst: {
+            waiting: `准备就绪 (响应: ${agent.responseTime || 1.2}s)`,
+            processing: '分析中',
+            idle: '空闲中',
+            error: '分析出错'
+        },
+        extension: {
+            loading: `加载插件 (${agent.loaded || 0}/${agent.total || 20})`,
+            idle: '空闲中',
+            error: '加载失败'
+        }
+    };
+    
+    return actions[agentKey]?.[agent.status] || actions[agentKey]?.idle || '空闲中';
+}
+
+// 滚动到上传区域（修复第一个问题）
+function scrollToUpload() {
+    console.log('[UI] 滚动到上传区域');
+    const uploadSection = document.getElementById('upload-section');
+    if (uploadSection) {
+        uploadSection.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    } else {
+        console.warn('[UI] 上传区域未找到');
+    }
+}
+
+// 将函数挂载到全局作用域，防止Vite在构建时移除
+if (typeof window !== 'undefined') {
+    window.initParticleSystem = initParticleSystem;
+    window.validateToken = validateToken;
+    window.checkAndRefreshToken = checkAndRefreshToken;
+    window.requireAuth = requireAuth;
+    window.checkLoginStatus = checkLoginStatus;
+    window.viewProcessingResult = viewProcessingResult;
+    window.exportToGraph = exportToGraph;
+    window.closeResultModal = closeResultModal;
+    window.formatFileSize = formatFileSize;
+    window.getAgentActionText = getAgentActionText;
+    window.scrollToUpload = scrollToUpload; // 添加这个函数到全局
+    
+    console.log('Functions mounted to window:', {
+        viewProcessingResult: typeof viewProcessingResult,
+        exportToGraph: typeof exportToGraph,
+        closeResultModal: typeof closeResultModal,
+        scrollToUpload: typeof scrollToUpload
+    });
+}

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # MongoDB数据库（后端主要使用的数据库）
   mongodb:

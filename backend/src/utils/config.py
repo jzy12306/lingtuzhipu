@@ -32,11 +32,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # CORS设置
-    CORS_ORIGINS: List[str] = os.getenv(
-        "CORS_ORIGINS", 
-        "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:5173"
-    ).split(",")
+    # CORS设置 - 不使用 pydantic 的环境变量解析，避免 JSON 解析错误
+    _cors_origins_str: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:5173")
+    
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
+        """将字符串转换为列表"""
+        if not self._cors_origins_str:
+            return ["*"]
+        return [origin.strip() for origin in self._cors_origins_str.split(",") if origin.strip()]
     
     # 文件上传设置
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
@@ -80,6 +84,7 @@ class Settings(BaseSettings):
 
 # 创建全局设置实例
 settings = Settings()
+
 
 # 确保上传目录存在
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
