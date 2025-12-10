@@ -1,0 +1,45 @@
+### [项目3] lingtuzhipu
+
+- **描述:** 实现一个基于知识图谱的智能问答系统后端服务
+- **网址:** https://github.com/jzy12306/WebCrawler_zhilianzhaopin
+
+- **技术栈:**
+  - **前端技术:**
+    - **编程语言**: TypeScript
+    - **前端框架**: React 18.2.0
+    - **UI组件库**: Material-UI (MUI) 5.15.0
+    - **路由管理**: React Router DOM 6.20.0
+    - **CSS解决方案**: Emotion 11.14.x
+    - **构建工具**: Vite 4.5.0
+    - **图表库**: ECharts 5.4.3
+  - **后端技术:**
+    - **编程语言**: Python 3.10+
+    - **Web框架**: FastAPI 0.104.1
+    - **服务器**: Uvicorn 0.24.0
+    - **异步处理**: Celery 5.3.4 (任务队列)
+  - **数据库技术:**
+    - **图数据库**: Neo4j 5.12.0
+    - **文档数据库**: MongoDB (motor 3.4.0, pymongo 4.6.1)
+    - **缓存数据库**: Redis 5.0.1
+    - **ORM框架**: SQLAlchemy 2.0.23
+  - **AI与知识图谱:**
+    - **大模型集成**: LangChain 0.1.5
+    - **多智能体框架**: LangGraph 0.0.23
+    - **向量数据库**: Milvus 2.3.7 (pymilvus)
+  - **文档处理与OCR:**
+    - **PDF处理**: PyMuPDF 1.24.0, PyPDF2 3.0.1
+    - **Word处理**: python-docx
+    - **OCR识别**: pytesseract 0.3.10
+    - **图像处理**: Pillow 10.1.0, pdf2image 1.17.0
+  - **安全与认证:**
+    - **JWT认证**: python-jose 3.3.0
+    - **密码哈希**: passlib 1.7.4
+  - **开发工具与配置:**
+    - **数据验证**: Pydantic 2.5.0, pydantic-settings 2.1.0
+    - **环境管理**: python-dotenv 1.0.0
+    - **数据分析**: pandas 2.2.0
+  - **部署与容器化:**
+    - **容器编排**: Docker Compose
+    - **Web服务器**: Nginx
+    - **前端部署**: 静态文件部署
+  - **开发环境**: Windows系统
