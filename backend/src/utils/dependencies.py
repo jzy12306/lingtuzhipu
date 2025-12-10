@@ -79,6 +79,10 @@ async def get_optional_current_user(
     return _ensure_user_fields(user)
 
 
+# 别名，保持向后兼容
+get_current_user_optional = get_optional_current_user
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     user_repo: UserRepository = Depends(get_user_repository)

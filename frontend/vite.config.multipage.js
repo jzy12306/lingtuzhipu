@@ -2,22 +2,15 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-// 自定义插件：处理HTML中的main.js引用
+// 自定义插件：保留HTML中的main.js引用
+// main.js 是独立的传统脚本，不需要被 Vite 处理，直接复制到 dist 目录
 const mainJsPlugin = () => {
   return {
     name: 'main-js-plugin',
     transformIndexHtml(html, context) {
-      // 替换所有HTML文件中的main.js引用为构建后的正确路径
-      if (context.filename.includes('index.html')) {
-        // index.html已经正确处理，跳过
-        return html;
-      }
-      
-      // 对于其他HTML文件，替换main.js引用
-      return html.replace(
-        /<script\s+src=["']main\.js["']><\/script>/g,
-        '<script type="module" src="/assets/main-56b7f0c5.js"></script>'
-      );
+      // 不做任何替换，保持原样引用 main.js
+      // main.js 会通过 Dockerfile 单独复制到 nginx 目录
+      return html;
     }
   };
 };

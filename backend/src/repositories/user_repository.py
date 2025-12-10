@@ -396,21 +396,27 @@ class UserRepository:
         """更新用户最后登录时间"""
         try:
             collection = await self.get_collection()
+            now = datetime.utcnow()
             
-            # 尝试用字符串id更新
-            await collection.update_one(
-                {"id": user_id},
-                {"$set": {"last_login": datetime.utcnow()}}
-            )
-            
-            # 如果不成功，尝试用ObjectId更新
+            # 优先尝试用ObjectId更新（MongoDB标准方式）
             try:
-                await collection.update_one(
+                result = await collection.update_one(
                     {"_id": ObjectId(user_id)},
-                    {"$set": {"last_login": datetime.utcnow()}}
+                    {"$set": {"last_login": now}}
                 )
-            except Exception:
-                pass
+                if result.modified_count > 0:
+                    self.logger.info(f"更新用户 {user_id} 最后登录时间成功")
+                    return
+            except Exception as e:
+                self.logger.debug(f"ObjectId更新失败，尝试字符串id: {str(e)}")
+            
+            # 如果 ObjectId 更新失败，尝试用字符串id更新
+            result = await collection.update_one(
+                {"id": user_id},
+                {"$set": {"last_login": now}}
+            )
+            if result.modified_count > 0:
+                self.logger.info(f"更新用户 {user_id} 最后登录时间成功(字符串id)")
         except Exception as e:
             self.logger.error(f"更新最后登录时间失败: {str(e)}")
     

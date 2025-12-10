@@ -37,15 +37,19 @@ class UserCreate(BaseModel):
 
 # 用户更新模型
 class UserUpdate(BaseModel):
-    username: Optional[str] = Field(None, min_length=3, max_length=50, description="用户名")
+    username: Optional[str] = Field(None, min_length=2, max_length=50, description="用户名")
     email: Optional[EmailStr] = Field(None, description="邮箱地址")
     password: Optional[str] = Field(None, min_length=6, description="密码")
     role: Optional[UserRole] = Field(None, description="用户角色")
+    phone: Optional[str] = Field(None, description="手机号码")
+    bio: Optional[str] = Field(None, max_length=500, description="个人简介")
     
     @validator('username')
-    def username_alphanumeric(cls, v):
-        if v is not None and not re.match(r'^[a-zA-Z0-9_]+$', v):
-            raise ValueError('用户名只能包含字母、数字和下划线')
+    def username_valid(cls, v):
+        if v is not None:
+            # 允许字母、数字、下划线和中文字符
+            if not re.match(r'^[\w\u4e00-\u9fa5]+$', v):
+                raise ValueError('用户名只能包含字母、数字、下划线和中文')
         return v
 
 
@@ -56,11 +60,16 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="邮箱地址")
     role: UserRole = Field(default=UserRole.USER, description="用户角色")
     is_admin: bool = Field(default=False, description="是否为管理员")
+    is_active: bool = Field(default=True, description="是否活跃")
+    email_verified: bool = Field(default=False, description="邮箱是否已验证")
+    phone: Optional[str] = Field(None, description="手机号码")
+    bio: Optional[str] = Field(None, description="个人简介")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
+    last_login: Optional[datetime] = Field(None, description="最后登录时间")
     
     class Config:
-        from_attributes = True  # Pydantic V2 语法，允许从ORM对象创建
+        from_attributes = True  # Pydantic V2 语法，允许仏ORM对象创建
 
 
 # 用户登录模型
@@ -105,9 +114,17 @@ class User(BaseModel):
     password: Optional[str] = Field(None, description="密码（兼容字段）")
     role: UserRole = Field(default=UserRole.USER, description="用户角色")
     is_admin: bool = Field(default=False, description="是否为管理员")
+    is_superuser: bool = Field(default=False, description="是否为超级管理员")
+    phone: Optional[str] = Field(None, description="手机号码")
+    bio: Optional[str] = Field(None, description="个人简介")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
+    last_login: Optional[datetime] = Field(None, description="最后登录时间")
     is_active: bool = Field(default=True, description="是否活跃")
+    email_verified: bool = Field(default=False, description="邮箱是否已验证")
+    mfa_enabled: bool = Field(default=False, description="是否启用MFA")
+    mfa_secret: Optional[str] = Field(None, description="MFA密钥")
+    mfa_recovery_codes: Optional[List[str]] = Field(None, description="MFA恢复码")
     
     class Config:
-        from_attributes = True  # Pydantic V2 语法，允许从ORM对象创建
+        from_attributes = True  # Pydantic V2 语法，允许仏ORM对象创建

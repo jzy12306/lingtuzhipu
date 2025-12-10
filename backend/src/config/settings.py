@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     ANALYST_AGENT_ENABLED: bool = True
     EXTENSION_AGENT_ENABLED: bool = True
     
+    # 文档处理限制
+    MAX_ENTITIES_PER_DOCUMENT: int = 1000
+    MAX_RELATIONS_PER_DOCUMENT: int = 2000
+    
     @property
     def CORS_ORIGINS(self) -> List[str]:
         """将CORS_ORIGINS字符串转换为列表"""

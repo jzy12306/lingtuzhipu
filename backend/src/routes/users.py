@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.models.user import User, UserCreate, UserUpdate, UserResponse, LoginHistoryResponse
 from src.utils.dependencies import get_current_user, get_current_active_user, get_current_admin_user
@@ -13,6 +13,65 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 async def get_user_repository() -> UserRepository:
     """获取用户仓库实例"""
     return UserRepository()
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取当前登录用户的个人信息"""
+    return current_user
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_active_user),
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    """更新当前用户的个人信息"""
+    try:
+        update_data = user_update.dict(exclude_unset=True)
+        
+        # 不允许普通用户修改自己的角色和管理员状态
+        if "role" in update_data:
+            del update_data["role"]
+        if "is_admin" in update_data:
+            del update_data["is_admin"]
+        
+        # 如果更新密码，需要加密
+        if "password" in update_data:
+            update_data["hashed_password"] = get_password_hash(update_data["password"])
+            del update_data["password"]
+        
+        # 如果更新用户名，检查是否已存在
+        if "username" in update_data:
+            username_user = await user_repo.find_by_username(update_data["username"])
+            if username_user and username_user.id != current_user.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="用户名已被使用"
+                )
+        
+        # 如果更新邮箱，检查是否已存在
+        if "email" in update_data:
+            email_user = await user_repo.find_by_email(update_data["email"])
+            if email_user and email_user.id != current_user.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="邮箱已被使用"
+                )
+        
+        update_data["updated_at"] = datetime.utcnow()
+        updated_user = await user_repo.update_user(current_user.id, update_data)
+        return updated_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"更新个人信息失败: {str(e)}"
+        )
 
 
 @router.get("/", response_model=List[UserResponse])
