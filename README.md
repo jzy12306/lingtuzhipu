@@ -1,5 +1,3 @@
-### [项目3] lingtuzhipu
-
 - **描述:** 实现一个基于知识图谱的智能问答系统后端服务
 - **网址:** https://github.com/jzy12306/WebCrawler_zhilianzhaopin
 
